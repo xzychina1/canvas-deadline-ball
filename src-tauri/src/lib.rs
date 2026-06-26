@@ -77,15 +77,8 @@ fn get_config(app: tauri::AppHandle) -> Result<deadlines::Config, String> {
 fn save_config(app: tauri::AppHandle, config: deadlines::Config) -> Result<(), String> {
     let dir = cfg_dir(&app)?;
     deadlines::save_config_to(&dir, &config)?;
-    // 窗口创建必须在主线程,从命令线程直接调用 sync_windows 会死锁
-    let app2 = app.clone();
-    app.run_on_main_thread(move || {
-        if let Err(e) = sync_windows(&app2) {
-            eprintln!("sync_windows failed: {}", e);
-        }
-        let _ = app2.emit("config-changed", ()); // 让所有球重载
-    })
-    .map_err(|e| e.to_string())?;
+    // 只存盘 + 广播;窗口的增删交给前端(JS WebviewWindow),避免在 Windows 上从命令线程建窗冻死 UI
+    let _ = app.emit("config-changed", ());
     Ok(())
 }
 

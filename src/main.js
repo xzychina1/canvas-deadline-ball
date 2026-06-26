@@ -1,6 +1,7 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
 const { listen } = window.__TAURI__.event;
+const { WebviewWindow, getAllWebviewWindows } = window.__TAURI__.webviewWindow;
 const appWindow = getCurrentWindow();
 
 const SIZES = { ball: [100, 100], list: [300, 420], settings: [340, 520] };
@@ -173,20 +174,68 @@ function addSource() {
   renderSettings();
 }
 
+// JS 端同步窗口集合(Windows 上从命令线程建窗会冻死 UI,所以放前端用异步 API)
+async function syncWindows() {
+  const enabled = (config.sources || []).filter((s) => s.enabled);
+  const desired = new Set(enabled.map((s) => "ball::" + s.id));
+  const all = await getAllWebviewWindows();
+  const existing = new Set(all.map((w) => w.label));
+
+  // 先建缺失的球
+  enabled.forEach((s, i) => {
+    const label = "ball::" + s.id;
+    if (!existing.has(label)) {
+      new WebviewWindow(label, {
+        url: "index.html",
+        width: 100,
+        height: 100,
+        x: 220 + i * 120,
+        y: 220,
+        transparent: true,
+        decorations: false,
+        alwaysOnTop: true,
+        resizable: false,
+        skipTaskbar: true,
+        shadow: false,
+        title: "Canvas Deadline Ball",
+      });
+    }
+  });
+
+  // 再关多余的(可能含自己,放最后)
+  for (const w of all) {
+    if (w.label.startsWith("ball::") && !desired.has(w.label)) {
+      try {
+        await w.close();
+      } catch (_) {}
+    }
+  }
+  if (enabled.length > 0) {
+    const setup = all.find((w) => w.label === "setup");
+    if (setup) {
+      try {
+        await setup.close();
+      } catch (_) {}
+    }
+  }
+}
+
 async function saveSettings() {
   config.refreshMinutes = Math.max(
     1,
     parseInt(document.getElementById("refresh-input").value, 10) || 30,
   );
   try {
-    // 后端会同步窗口集合 + 广播 config-changed(各球自行重载)
-    await invoke("save_config", { config });
+    await invoke("save_config", { config }); // 只存盘 + 广播
   } catch (e) {
     document.getElementById("add-msg").textContent = "保存失败:" + e;
     return;
   }
-  // 本源还在就回列表(setup 窗口会被后端关掉,无所谓)
-  await setState(sourceId ? "list" : "settings");
+  await syncWindows(); // JS 端建/关窗口(不死锁)
+  await refresh();
+  if (sourceId && config.sources.some((s) => s.id === sourceId && s.enabled)) {
+    await setState("list");
+  }
 }
 
 // ---------- 自动刷新 ----------
