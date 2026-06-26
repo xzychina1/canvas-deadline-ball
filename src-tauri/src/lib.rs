@@ -149,6 +149,100 @@ fn save_position(app: tauri::AppHandle, label: String, x: i32, y: i32) -> Result
     std::fs::write(&path, json).map_err(|e| e.to_string())
 }
 
+// ---------- Canvas 登录 + API(自动完成检测,实验) ----------
+
+#[tauri::command]
+async fn open_canvas_login(app: tauri::AppHandle, base_url: String) -> Result<(), String> {
+    if app.get_webview_window("canvas-login").is_some() {
+        return Ok(());
+    }
+    let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
+    WebviewWindowBuilder::new(&app, "canvas-login", WebviewUrl::External(url))
+        .title("Log in to Canvas")
+        .inner_size(520.0, 720.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// 用 canvas-login 窗口的登录 cookie 调 Canvas API(async 避开 Windows 读 cookie 死锁)
+#[tauri::command]
+async fn canvas_api(
+    app: tauri::AppHandle,
+    base_url: String,
+    path: String,
+) -> Result<String, String> {
+    let win = app
+        .get_webview_window("canvas-login")
+        .ok_or_else(|| "未登录:请先点「登录 Canvas」".to_string())?;
+    let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
+    let cookies = win.cookies_for_url(url).map_err(|e| e.to_string())?;
+    if cookies.is_empty() {
+        return Err("没读到 cookie——可能登录还没完成".to_string());
+    }
+    let cookie_header = cookies
+        .iter()
+        .map(|c| format!("{}={}", c.name(), c.value()))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let full = format!("{}{}", base_url.trim_end_matches('/'), path);
+    let resp = minreq::get(full.as_str())
+        .with_header("Cookie", cookie_header)
+        .with_header("Accept", "application/json")
+        .with_header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
+             (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        )
+        .send()
+        .map_err(|e| e.to_string())?;
+    resp.as_str().map(|s| s.to_string()).map_err(|e| e.to_string())
+}
+
+// 拉 planner items,把已提交/已评分/已标记完成的作业写进 completed.json(键 `assignment:<id>`)
+#[tauri::command]
+async fn canvas_sync_done(app: tauri::AppHandle, base_url: String) -> Result<usize, String> {
+    let start = (chrono::Utc::now() - chrono::Duration::days(90))
+        .format("%Y-%m-%d")
+        .to_string();
+    let path = format!("/api/v1/planner/items?per_page=100&start_date={}", start);
+    let body = canvas_api(app.clone(), base_url, path).await?;
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+        format!(
+            "planner JSON 解析失败: {} (前 120 字: {})",
+            e,
+            body.chars().take(120).collect::<String>()
+        )
+    })?;
+    let mut set = load_completed(&app);
+    let mut n = 0usize;
+    if let Some(arr) = v.as_array() {
+        for item in arr {
+            let submitted = item
+                .pointer("/submissions/submitted")
+                .and_then(|b| b.as_bool())
+                .unwrap_or(false);
+            let graded = item
+                .pointer("/submissions/graded")
+                .and_then(|b| b.as_bool())
+                .unwrap_or(false);
+            let marked = item
+                .pointer("/planner_override/marked_complete")
+                .and_then(|b| b.as_bool())
+                .unwrap_or(false);
+            if submitted || graded || marked {
+                if let Some(id) = item.get("plannable_id").and_then(|x| x.as_i64()) {
+                    if set.insert(format!("assignment:{}", id)) {
+                        n += 1;
+                    }
+                }
+            }
+        }
+    }
+    save_completed(&app, &set)?;
+    Ok(n)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -162,7 +256,10 @@ pub fn run() {
             get_position,
             save_position,
             mark_done,
-            unmark_done
+            unmark_done,
+            open_canvas_login,
+            canvas_api,
+            canvas_sync_done
         ])
         .setup(|app| {
             if let Err(e) = sync_windows(app.handle()) {

@@ -465,6 +465,65 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("settings-save").addEventListener("click", saveSettings);
   document.getElementById("add-test").addEventListener("click", testSource);
   document.getElementById("add-btn").addEventListener("click", addSource);
+
+  // Canvas 自动完成(实验):开登录窗 + 测试认证
+  const canvasBase = () => {
+    const c = (config.sources || []).find((s) => s.kind === "canvas");
+    try {
+      return c ? new URL(c.url).origin : null;
+    } catch (_) {
+      return null;
+    }
+  };
+  document.getElementById("canvas-login-btn").addEventListener("click", async () => {
+    const base = canvasBase();
+    const msg = document.getElementById("canvas-msg");
+    if (!base) {
+      msg.textContent = "先添加一个 Canvas 源";
+      return;
+    }
+    try {
+      await invoke("open_canvas_login", { baseUrl: base });
+      msg.textContent = "在弹出的窗口里登录,然后点「测试连接」";
+    } catch (e) {
+      msg.textContent = "打开失败:" + e;
+    }
+  });
+  document.getElementById("canvas-test-btn").addEventListener("click", async () => {
+    const base = canvasBase();
+    const msg = document.getElementById("canvas-msg");
+    if (!base) {
+      msg.textContent = "先添加一个 Canvas 源";
+      return;
+    }
+    msg.textContent = "测试中…";
+    try {
+      const json = await invoke("canvas_api", {
+        baseUrl: base,
+        path: "/api/v1/users/self",
+      });
+      const u = JSON.parse(json);
+      msg.textContent = "✓ 已登录:" + (u.name || u.short_name || "ok");
+    } catch (e) {
+      msg.textContent = "✗ " + e;
+    }
+  });
+  document.getElementById("canvas-sync-btn").addEventListener("click", async () => {
+    const base = canvasBase();
+    const msg = document.getElementById("canvas-msg");
+    if (!base) {
+      msg.textContent = "先添加一个 Canvas 源";
+      return;
+    }
+    msg.textContent = "同步中…";
+    try {
+      const n = await invoke("canvas_sync_done", { baseUrl: base });
+      msg.textContent = `✓ 同步完成,标记了 ${n} 个新完成`;
+      await refresh();
+    } catch (e) {
+      msg.textContent = "✗ " + e;
+    }
+  });
   document.getElementById("lang-select").addEventListener("change", (e) => {
     lang = e.target.value;
     config.lang = lang;

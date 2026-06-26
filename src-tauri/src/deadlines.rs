@@ -182,6 +182,20 @@ fn interpret(kind: &str, summary: &str) -> (String, String) {
     }
 }
 
+// 从 Canvas ICS URL 抠出 assignment id(和 planner API 的 plannable_id 对账用)
+pub fn assignment_id(url: &str) -> Option<String> {
+    let i = url.find("assignment_")?;
+    let digits: String = url[i + "assignment_".len()..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        None
+    } else {
+        Some(digits)
+    }
+}
+
 // ---------- 单个源:拉取 + 解析 + 解读 ----------
 
 fn fetch_source(src: &Source) -> Result<Vec<Raw>, String> {
@@ -229,8 +243,12 @@ pub fn aggregate(config: &Config, completed: &HashSet<String>) -> Vec<Deadline> 
         match fetch_source(src) {
             Ok(raws) => {
                 for r in raws {
-                    if completed.contains(&r.uid) {
-                        continue; // 已标记完成,跳过
+                    let done = completed.contains(&r.uid)
+                        || assignment_id(&r.url)
+                            .map(|id| completed.contains(&format!("assignment:{}", id)))
+                            .unwrap_or(false);
+                    if done {
+                        continue; // 已完成(手动打勾 或 Canvas API 检测),跳过
                     }
                     all.push((
                         r.due,
