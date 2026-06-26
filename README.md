@@ -32,10 +32,10 @@ In Canvas: **Calendar → Calendar Feed** (bottom-right) → copy the `.ics` URL
 Create a file named `feed_url.txt` containing just that URL, at:
 
 ```
-%APPDATA%\com.ziyunxu.canvasdeadlineball\feed_url.txt
+%APPDATA%\com.canvasdeadlineball.app\feed_url.txt
 ```
 
-(i.e. `C:\Users\<you>\AppData\Roaming\com.ziyunxu.canvasdeadlineball\feed_url.txt`)
+(i.e. `C:\Users\<you>\AppData\Roaming\com.canvasdeadlineball.app\feed_url.txt`)
 
 ### 3. Run it
 Grab a release binary, or build from source (below).
