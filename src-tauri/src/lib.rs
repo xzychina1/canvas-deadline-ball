@@ -7,6 +7,17 @@ fn cfg_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path().app_config_dir().map_err(|e| e.to_string())
 }
 
+// 容忍用户只填 "school.instructure.com":补全 https:// 并去掉尾斜杠。
+fn norm_base(s: &str) -> String {
+    let s = s.trim();
+    let s = if s.contains("://") {
+        s.to_string()
+    } else {
+        format!("https://{}", s)
+    };
+    s.trim_end_matches('/').to_string()
+}
+
 // 创建一个球窗口(透明/无边框/置顶/不可缩放/不进任务栏)
 fn build_ball(app: &tauri::AppHandle, label: &str, x: f64, y: f64) -> Result<(), String> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
@@ -151,15 +162,58 @@ fn save_position(app: tauri::AppHandle, label: String, x: i32, y: i32) -> Result
 
 // ---------- Canvas 登录 + API(自动完成检测,实验) ----------
 
-// 读 cookie 用任意 webview 窗口即可(WebView2 全应用共享 cookie store)
-fn any_webview(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
-    app.get_webview_window("canvas-login")
-        .or_else(|| app.webview_windows().into_values().next())
+// 读 Canvas cookie 必须用一个"已导航到 Canvas 域名"的 webview —— ball 窗口(本地页面)读不到。
+// 第一次创建一个隐藏窗口并等它从磁盘加载持久化 cookie;之后常驻复用,刷新不再每次开窗(否则太卡)。
+async fn ensure_canvas_session(
+    app: &tauri::AppHandle,
+    base_url: &str,
+) -> Result<tauri::WebviewWindow, String> {
+    let target: tauri::Url = norm_base(base_url)
+        .parse()
+        .map_err(|e| format!("bad url: {}", e))?;
+    // 已有会话窗:若它停在别的学校域名上,导航过去并等 cookie 重新加载(支持换学校)
+    if let Some(w) = app.get_webview_window("canvas-login") {
+        let same = w
+            .url()
+            .ok()
+            .map(|u| u.origin() == target.origin())
+            .unwrap_or(false);
+        if !same {
+            let _ = w.navigate(target.clone());
+            tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+        }
+        return Ok(w);
+    }
+    // 创建隐藏会话窗;并发下若另一个任务抢先用同名标签建好了(build 报重名错),
+    // 回退去取它,避免那个球白报一次错。
+    match WebviewWindowBuilder::new(app, "canvas-login", WebviewUrl::External(target))
+        .title("Canvas")
+        .inner_size(420.0, 600.0)
+        .visible(false)
+        .build()
+    {
+        Ok(w) => {
+            // 等 webview 从磁盘加载好持久化的 cookie
+            tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+            Ok(w)
+        }
+        Err(_) => app
+            .get_webview_window("canvas-login")
+            .ok_or_else(|| "canvas session window race".to_string()),
+    }
 }
 
 #[tauri::command]
 async fn open_canvas_login(app: tauri::AppHandle, base_url: String) -> Result<(), String> {
-    if app.get_webview_window("canvas-login").is_some() {
+    let base_url = norm_base(&base_url);
+    // 已有会话窗口(可能是隐藏的小尺寸常驻窗,或停在别的页面)→ 复位尺寸 + 导航回登录页再显示
+    if let Some(w) = app.get_webview_window("canvas-login") {
+        let _ = w.set_size(tauri::LogicalSize::new(520.0, 720.0));
+        if let Ok(url) = base_url.parse::<tauri::Url>() {
+            let _ = w.navigate(url);
+        }
+        let _ = w.show();
+        let _ = w.set_focus();
         return Ok(());
     }
     let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
@@ -178,7 +232,8 @@ async fn canvas_api(
     base_url: String,
     path: String,
 ) -> Result<String, String> {
-    let win = any_webview(&app).ok_or_else(|| "no webview".to_string())?;
+    let base_url = norm_base(&base_url); // 容忍没写 https://
+    let win = ensure_canvas_session(&app, &base_url).await?;
     let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
     let cookies = win.cookies_for_url(url).map_err(|e| e.to_string())?;
     if cookies.is_empty() {
@@ -247,29 +302,65 @@ async fn canvas_sync_done(app: tauri::AppHandle, base_url: String) -> Result<usi
     Ok(n)
 }
 
-// 自动同步:cookie 是按窗口隔离的,所以临时开一个隐藏 canvas-login 窗口
-// (从磁盘加载已存登录态)→ 读 cookie 同步 → 用完关掉。
+// 自动同步(给 ICS-canvas 源标记已交):确保有会话窗口(常驻复用)→ 拉 planner 标记完成。
 #[tauri::command]
 async fn canvas_autosync(app: tauri::AppHandle, base_url: String) -> Result<usize, String> {
-    let created = app.get_webview_window("canvas-login").is_none();
-    if created {
-        let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
-        WebviewWindowBuilder::new(&app, "canvas-login", WebviewUrl::External(url))
-            .title("Canvas")
-            .inner_size(420.0, 600.0)
-            .visible(false)
-            .build()
-            .map_err(|e| e.to_string())?;
-        // 等 webview 从磁盘加载好持久化的 cookie
-        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
-    }
-    let result = canvas_sync_done(app.clone(), base_url).await;
-    if created {
-        if let Some(w) = app.get_webview_window("canvas-login") {
-            let _ = w.close();
+    ensure_canvas_session(&app, &base_url).await?;
+    canvas_sync_done(app, base_url).await
+}
+
+// 免 ICS:某个 kind="canvas-api" 源的 ddl —— 用登录态直接调 planner API 拿(含自动完成)。
+#[tauri::command]
+async fn get_canvas_deadlines(
+    app: tauri::AppHandle,
+    source_id: String,
+) -> Result<Vec<deadlines::Deadline>, String> {
+    let dir = cfg_dir(&app)?;
+    let cfg = deadlines::load_config_from(&dir);
+    let src = cfg
+        .sources
+        .iter()
+        .find(|s| s.id == source_id)
+        .cloned()
+        .ok_or("source not found")?;
+    let base = norm_base(&src.url);
+    let start = (chrono::Utc::now() - chrono::Duration::days(2))
+        .format("%Y-%m-%d")
+        .to_string();
+    let end = (chrono::Utc::now() + chrono::Duration::days(cfg.window_days + 2))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    // planner 是分页的:逐页拉直到某页不足 100 条(上限 20 页兜底,防失控)
+    let mut merged: Vec<serde_json::Value> = Vec::new();
+    for page in 1..=20u32 {
+        let path = format!(
+            "/api/v1/planner/items?per_page=100&page={}&start_date={}&end_date={}&order=asc",
+            page, start, end
+        );
+        let body = match canvas_api(app.clone(), base.clone(), path).await {
+            Ok(b) => b,
+            // 没读到 cookie = 还没登录 → 给前端明确信号,渲染"去登录"而非"出错"
+            Err(e) if e.contains("cookie") => return Err("NOT_LOGGED_IN".to_string()),
+            Err(e) => return Err(e),
+        };
+        // 登录过期会返回登录页 HTML(不是 JSON 数组)
+        if !body.trim_start().starts_with('[') {
+            return Err("NOT_LOGGED_IN".to_string());
+        }
+        let v: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| format!("planner JSON 解析失败: {}", e))?;
+        let arr = v.as_array().ok_or("planner 返回不是数组")?;
+        let n = arr.len();
+        merged.extend(arr.iter().cloned());
+        if n < 100 {
+            break; // 最后一页
         }
     }
-    result
+
+    let completed = load_completed(&app);
+    let merged_body = serde_json::Value::Array(merged).to_string();
+    deadlines::planner_to_deadlines(&merged_body, &base, &src, &completed, cfg.window_days)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -289,7 +380,8 @@ pub fn run() {
             open_canvas_login,
             canvas_api,
             canvas_sync_done,
-            canvas_autosync
+            canvas_autosync,
+            get_canvas_deadlines
         ])
         .setup(|app| {
             if let Err(e) = sync_windows(app.handle()) {

@@ -304,6 +304,133 @@ pub fn deadlines_for(
     aggregate(&sub, completed)
 }
 
+// ---------- Canvas planner API → ddl(给 kind="canvas-api":免 ICS,直接登录拉) ----------
+
+// 把 /api/v1/planner/items 的返回转成本源的 ddl 列表。
+// 截止时间优先取 plannable.due_at,退回 item.plannable_date;
+// 已交/已评分/已手动标记的直接跳过(自动完成内建);uid 带域名隔离不同学校。
+pub fn planner_to_deadlines(
+    body: &str,
+    base: &str,
+    src: &Source,
+    completed: &HashSet<String>,
+    window_days: i64,
+) -> Result<Vec<Deadline>, String> {
+    let v: serde_json::Value = serde_json::from_str(body).map_err(|e| {
+        format!(
+            "planner JSON 解析失败(多半是没登录,返回了登录页): {} (前 120 字: {})",
+            e,
+            body.chars().take(120).collect::<String>()
+        )
+    })?;
+    let arr = v.as_array().ok_or("planner 返回不是数组")?;
+
+    let now = Utc::now();
+    let until = now + chrono::Duration::days(window_days);
+    let base_trim = base.trim_end_matches('/');
+    let mut all: Vec<(DateTime<Utc>, Deadline)> = Vec::new();
+
+    for item in arr {
+        let ptype = item
+            .get("plannable_type")
+            .and_then(|x| x.as_str())
+            .unwrap_or("");
+        // 只要"要交的东西",忽略公告/纯日历事件/便签
+        if matches!(ptype, "announcement" | "calendar_event" | "planner_note") {
+            continue;
+        }
+        let plannable = item.get("plannable");
+        // 只认有真实截止时间(due_at)的项。没有 due_at 的(页面/未评分讨论等)其
+        // plannable_date 只是 planner 的排序锚点,不是 ddl,拿来当倒计时是假的。
+        let Some(due_str) = plannable
+            .and_then(|p| p.get("due_at"))
+            .and_then(|x| x.as_str())
+        else {
+            continue;
+        };
+        let Ok(due) = DateTime::parse_from_rfc3339(due_str) else {
+            continue;
+        };
+        let due = due.with_timezone(&Utc);
+
+        let submitted = item
+            .pointer("/submissions/submitted")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(false);
+        let graded = item
+            .pointer("/submissions/graded")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(false);
+        let marked = item
+            .pointer("/planner_override/marked_complete")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(false);
+        // plannable_id 可能是数字或(大 id 时)字符串;缺失就跳过 —— 别用 0 兜底,
+        // 否则多个缺 id 的项会撞成同一 uid,打勾一个会连带隐藏一片。
+        let Some(id) = item.get("plannable_id").and_then(|x| {
+            x.as_i64()
+                .map(|n| n.to_string())
+                .or_else(|| x.as_str().map(|s| s.to_string()))
+        }) else {
+            continue;
+        };
+        let uid = format!("{}|planner:{}", base_trim, id);
+        // 既认本路径的 key,也认 ICS/自动同步写的 assignment:<id>,
+        // 这样同一作业在两种球之间标记完成是一致的。
+        if submitted
+            || graded
+            || marked
+            || completed.contains(&uid)
+            || completed.contains(&format!("assignment:{}", id))
+        {
+            continue; // 已完成(API 检测 或 手动打勾)
+        }
+
+        let title = plannable
+            .and_then(|p| p.get("title").or_else(|| p.get("name")))
+            .and_then(|x| x.as_str())
+            .unwrap_or("(untitled)")
+            .to_string();
+        let course = item
+            .get("context_name")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
+        let url = item
+            .get("html_url")
+            .and_then(|x| x.as_str())
+            .map(|h| {
+                if h.starts_with("http") {
+                    h.to_string()
+                } else {
+                    format!("{}{}", base_trim, h)
+                }
+            })
+            .unwrap_or_default();
+
+        all.push((
+            due,
+            Deadline {
+                source: src.name.clone(),
+                color: src.color.clone(),
+                course,
+                title,
+                due: due.with_timezone(&Local).format("%m-%d %H:%M").to_string(),
+                due_ms: due.timestamp_millis(),
+                uid,
+                url,
+            },
+        ));
+    }
+
+    all.sort_by_key(|(d, _)| *d);
+    Ok(all
+        .into_iter()
+        .filter(|(d, _)| *d >= now && *d <= until)
+        .map(|(_, dl)| dl)
+        .collect())
+}
+
 // ---------- 测试一个源(设置面板的"测试"按钮):返回解析到的事件总数 ----------
 
 pub fn test_source(url: &str, kind: &str) -> Result<usize, String> {

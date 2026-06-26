@@ -28,8 +28,11 @@ const I18N = {
     saveFail: "保存失败:", enabled: "启用", del: "删除", collapse: "收起", markDone: "标记完成",
     canvasUrlPh: "Canvas 网址 https://xxx.instructure.com",
     canvasUrlHint: "留空则自动取自上面的 Canvas 源链接",
+    canvasApiKind: "Canvas(登录免ICS)",
     needCanvas: "先填 Canvas 网址,或在上面添加一个 Canvas 源",
+    needLogin: "还没登录 Canvas", loginCanvas: "登录 Canvas", loginShort: "去登录", refreshed: "已刷新",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
+    testCanvasOk: (name) => `✓ 成功,已登录:${name}`,
   },
   en: {
     settings: "Settings", language: "Language", refreshInterval: "Refresh (min)",
@@ -44,8 +47,11 @@ const I18N = {
     saveFail: "Save failed: ", enabled: "Enabled", del: "Delete", collapse: "Collapse", markDone: "Mark done",
     canvasUrlPh: "Canvas URL https://xxx.instructure.com",
     canvasUrlHint: "Leave blank to use your Canvas source's URL above",
+    canvasApiKind: "Canvas (login, no ICS)",
     needCanvas: "Enter a Canvas URL, or add a Canvas source above",
+    needLogin: "Not logged in to Canvas", loginCanvas: "Log in to Canvas", loginShort: "Log in", refreshed: "Refreshed",
     testOk: (n) => `✓ OK — parsed ${n} events`,
+    testCanvasOk: (name) => `✓ OK — logged in: ${name}`,
   },
 };
 let lang = "zh";
@@ -84,11 +90,18 @@ async function refresh() {
     tick();
     return;
   }
+  // canvas-api 源:免 ICS,直接用登录态调 Canvas API 拿 ddl;其余走 ICS
+  const me = (config.sources || []).find((s) => s.id === sourceId);
+  const cmd = me && me.kind === "canvas-api" ? "get_canvas_deadlines" : "get_source_deadlines";
   try {
-    items = await invoke("get_source_deadlines", { sourceId });
+    items = await invoke(cmd, { sourceId });
   } catch (e) {
-    console.error("get_source_deadlines failed:", e);
-    items = null;
+    if (String(e).includes("NOT_LOGGED_IN")) {
+      items = "login"; // 未登录:渲染"去登录"而不是"出错"
+    } else {
+      console.error(cmd + " failed:", e);
+      items = null;
+    }
   }
   renderBallAndList();
   tick();
@@ -105,6 +118,21 @@ function renderBallAndList() {
     countEl.style.color = "#e2503b";
     cardCount.style.color = "#e2503b";
     listEl.innerHTML = `<div class="empty">${esc(t("fetchError"))}</div>`;
+    return;
+  }
+
+  if (items === "login") {
+    countEl.textContent = "↪";
+    cardCount.textContent = "↪";
+    countEl.style.color = "#9ad36b";
+    cardCount.style.color = "#9ad36b";
+    listEl.innerHTML = `<div class="empty">${esc(t("needLogin"))}</div>`;
+    const btn = document.createElement("button");
+    btn.className = "primary";
+    btn.textContent = t("loginCanvas");
+    btn.style.cssText = "display:block;margin:10px auto;";
+    btn.addEventListener("click", loginAndPoll);
+    listEl.appendChild(btn);
     return;
   }
 
@@ -168,6 +196,8 @@ function tick() {
   let text;
   if (items === null) {
     text = t("error");
+  } else if (items === "login") {
+    text = t("loginShort");
   } else if (items.length === 0) {
     text = "--:--:--";
   } else {
@@ -177,6 +207,7 @@ function tick() {
   }
   let col;
   if (items === null) col = "#e2503b";
+  else if (items === "login") col = "#9ad36b";
   else if (items.length === 0) col = "#8a8a8a";
   else col = urgencyColor(items[0].dueMs - Date.now());
   if (labelEl) {
@@ -299,8 +330,16 @@ async function testSource() {
   }
   msg.textContent = t("testing");
   try {
-    const n = await invoke("test_source", { url, kind });
-    msg.textContent = t("testOk")(n);
+    if (kind === "canvas-api") {
+      // 免 ICS 的 Canvas 源:没法解析 ICS,改成验证登录态(用规整后的 origin)
+      const base = normOrigin(url) || url;
+      const json = await invoke("canvas_api", { baseUrl: base, path: "/api/v1/users/self" });
+      const u = JSON.parse(json);
+      msg.textContent = t("testCanvasOk")(u.name || u.short_name || "ok");
+    } else {
+      const n = await invoke("test_source", { url, kind });
+      msg.textContent = t("testOk")(n);
+    }
   } catch (e) {
     msg.textContent = t("testFail") + e;
   }
@@ -316,7 +355,17 @@ function addSource() {
     msg.textContent = t("needNameUrl");
     return;
   }
-  config.sources.push({ id: crypto.randomUUID(), name, kind, url, color, enabled: true });
+  let saveUrl = url;
+  if (kind === "canvas-api") {
+    // 统一成 https://xxx.instructure.com(去掉多余路径/补 scheme),否则后端拉数据会失败
+    const o = normOrigin(url);
+    if (!o) {
+      msg.textContent = t("needUrl");
+      return;
+    }
+    saveUrl = o;
+  }
+  config.sources.push({ id: crypto.randomUUID(), name, kind, url: saveUrl, color, enabled: true });
   document.getElementById("add-name").value = "";
   document.getElementById("add-url").value = "";
   msg.textContent = t("added");
@@ -445,21 +494,43 @@ async function setupPosition() {
 }
 
 // ---------- Canvas 自动完成 ----------
-function canvasBase() {
-  // 优先用手填的网址(不想配 ICS 也能用登录/自动完成);否则取第一个 canvas 源的链接
-  const manual = (config.canvasBaseUrl || "").trim();
-  if (manual) {
-    try {
-      return new URL(manual.includes("://") ? manual : "https://" + manual).origin;
-    } catch (_) {
-      /* 填得不对就往下走 */
-    }
-  }
-  const c = (config.sources || []).find((s) => s.kind === "canvas");
+// 补全 scheme、取 origin(扔掉多余路径);填得不对返回 null
+function normOrigin(u) {
   try {
-    return c ? new URL(c.url).origin : null;
+    return new URL(u.includes("://") ? u : "https://" + u).origin;
   } catch (_) {
     return null;
+  }
+}
+function canvasBase() {
+  // 当前球本身就是 canvas-api 源 → 优先用它自己的网址,保证登录窗和拉数据指向同一学校
+  const me = (config.sources || []).find((s) => s.id === sourceId);
+  if (me && me.kind === "canvas-api") {
+    const o = normOrigin(me.url);
+    if (o) return o;
+  }
+  // 否则用手填的网址(不配 ICS 也能用登录/自动完成),再否则取第一个 Canvas 源
+  const manual = (config.canvasBaseUrl || "").trim();
+  if (manual) {
+    const o = normOrigin(manual);
+    if (o) return o;
+  }
+  const c = (config.sources || []).find((s) => s.kind === "canvas" || s.kind === "canvas-api");
+  return c ? normOrigin(c.url) : null;
+}
+// 登录是在另一个窗口完成的,收不到完成信号 → 打开登录后轮询几次,拉到数据就停
+async function loginAndPoll() {
+  const base = canvasBase();
+  if (!base) return;
+  try {
+    await invoke("open_canvas_login", { baseUrl: base });
+  } catch (_) {
+    return;
+  }
+  for (let i = 0; i < 20; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    await refresh();
+    if (Array.isArray(items)) break; // 成功(拿到数组)就停
   }
 }
 function isCanvasBall() {
@@ -512,6 +583,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("add-test").addEventListener("click", testSource);
   document.getElementById("add-btn").addEventListener("click", addSource);
 
+  // 选 "Canvas(登录免ICS)" 时,URL 框提示改成填 Canvas 网址而非 ICS 链接
+  document.getElementById("add-kind").addEventListener("change", (e) => {
+    const urlEl = document.getElementById("add-url");
+    const key = e.target.value === "canvas-api" ? "canvasUrlPh" : "urlPh";
+    urlEl.setAttribute("data-i18n-ph", key);
+    urlEl.placeholder = t(key);
+  });
+
   // Canvas 自动完成:按钮
   document.getElementById("canvas-login-btn").addEventListener("click", async () => {
     const base = canvasBase();
@@ -542,6 +621,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       });
       const u = JSON.parse(json);
       msg.textContent = "✓ 已登录:" + (u.name || u.short_name || "ok");
+      await refresh(); // 登录通了就顺手把这个球填上(免 ICS 球否则会停在「去登录」)
     } catch (e) {
       msg.textContent = "✗ " + e;
     }
@@ -551,6 +631,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
+      return;
+    }
+    // 没有 ICS-canvas 源时,canvas_autosync 写的 assignment:<id> 对 canvas-api 球无效
+    // (它的完成由后端内联处理)→ 刷新一下就够了,别报「标记了 N 个」误导用户
+    const hasIcsCanvas = (config.sources || []).some((s) => s.kind === "canvas");
+    if (!hasIcsCanvas) {
+      await refresh();
+      msg.textContent = t("refreshed");
       return;
     }
     msg.textContent = "同步中…";
