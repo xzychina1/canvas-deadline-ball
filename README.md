@@ -1,5 +1,7 @@
 # Canvas Deadline Ball 🔴
 
+**English** · [简体中文](README.zh-CN.md)
+
 A tiny always-on-top desktop floating ball that shows your upcoming **Canvas** assignment
 deadlines — so you can glance at what's due this week without ever opening Canvas.
 
