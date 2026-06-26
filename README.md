@@ -2,8 +2,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-A tiny always-on-top desktop floating ball that shows your upcoming **Canvas** assignment
-deadlines — so you can glance at what's due this week without ever opening Canvas.
+Always-on-top desktop floating balls that show your upcoming deadlines from **Canvas**, **Google Calendar**, or any **ICS** calendar feed — one ball per source, with a live countdown — so you can glance at what's due without opening anything.
 
 <p align="center">
   <img src="docs/balls.png" width="420" alt="Two deadline balls on the desktop" /><br />
@@ -13,36 +12,26 @@ deadlines — so you can glance at what's due this week without ever opening Can
 
 ## Why
 
-Canvas is fine, but you have to *go look*. This lives on your desktop instead: a small ball
-showing how many assignments are due in the next 7 days and the soonest due date. Click it to
-expand the full list; click any item to jump straight to it in Canvas.
+Canvas is fine, but you have to *go look*. This lives on your desktop instead: a small ball per calendar showing how many things are due in the next 7 days and a live countdown to the soonest one. Click it to expand the list, click an item to open it, check it off when it's done.
 
 ## Features
 
-- 🔴 Frameless, transparent, always-on-top, draggable ball
-- 📅 Reads your assignments from your Canvas **calendar feed (ICS)** — no API token needed
-- 🗓️ Shows the count + nearest deadline; click to expand the full 7-day list
-- 🔗 Click any assignment to open it in your browser
+- 🔴 One frameless, transparent, always-on-top, draggable ball **per source** (Canvas / Google Calendar / any ICS)
+- ⏱️ Live countdown to the nearest deadline, color-coded by urgency (green → yellow → red)
+- 📋 Click to expand the 7-day list; click an item to open it in your browser
+- ✅ **Mark done** — check off a deadline and it leaves the count
+- 🔄 **Canvas auto-complete (beta)** — log into Canvas once and submitted assignments get checked off automatically (see Setup)
+- ⚙️ Visual settings — add/remove sources, pick colors, switch 中文 / English; auto-refreshes on a timer
 - 🪶 Lightweight — built with [Tauri](https://tauri.app) (Rust + the OS WebView), not Electron
 
 ## Setup
 
-### 1. Get your Canvas calendar feed URL
-In Canvas: **Calendar → Calendar Feed** (bottom-right) → copy the `.ics` URL.
-
-> ⚠️ Treat this URL like a password — anyone who has it can read your calendar. You can reset it in Canvas if it leaks.
-
-### 2. Tell the app your feed URL
-Create a file named `feed_url.txt` containing just that URL, at:
-
-```
-%APPDATA%\com.canvasdeadlineball.app\feed_url.txt
-```
-
-(i.e. `C:\Users\<you>\AppData\Roaming\com.canvasdeadlineball.app\feed_url.txt`)
-
-### 3. Run it
-Grab a release binary, or build from source (below).
+1. **Get a calendar feed (ICS) URL.**
+   - **Canvas**: *Calendar → Calendar Feed* (bottom-right) → copy the `.ics` URL.
+   - **Google Calendar**: *Settings and sharing → Integrate calendar → Secret address in iCal format*.
+   > ⚠️ Treat these URLs like a password — anyone who has one can read your calendar. You can reset it if it leaks.
+2. **Add it in the app**: click the ball → ⚙ settings → paste the URL, pick a kind (Canvas / Google / generic ICS) and a color → **Test** → **Add** → **Save**. A ball appears for that source.
+3. *(optional)* **Canvas auto-complete**: in settings, **log in to Canvas** once. From then on the app reads your submitted assignments via the Canvas API using your logged-in session and checks them off automatically. Handy when your school blocks API tokens (e.g. UMich) — it works through the normal web login, like a campus-VPN sign-in. *Canvas only; other calendars stay manual check-off.*
 
 ## Build from source
 
@@ -51,30 +40,27 @@ Grab a release binary, or build from source (below).
 ```bash
 npm install
 npm run tauri dev      # run in dev
-npm run tauri build    # produce a release binary
+npm run tauri build    # produce a release installer
 ```
 
-> On low-RAM Windows machines the first build can run out of memory (Tauri pulls a large
-> dependency tree). If it OOMs, build single-threaded: run `cargo build -j 1` inside `src-tauri/`.
+> On low-RAM Windows machines the first build can run out of memory (Tauri pulls a large dependency tree). If it OOMs, build single-threaded: `cargo build -j 1` inside `src-tauri/`.
 
 ## How it works
 
-- **Backend (Rust, `src-tauri/`)** — fetches the ICS feed (`minreq`, native TLS), parses events
-  (`ical`), converts due dates to your local timezone (`chrono`), filters to the next 7 days, and
-  exposes a `get_deadlines` command to the frontend.
-- **Frontend (vanilla HTML/CSS/JS, `src/`)** — the ball and its expandable card; resizes the
-  window on expand, and handles drag-vs-click manually so the ball is both draggable and clickable.
+- **Backend (Rust, `src-tauri/`)** — fetches each ICS feed (`minreq`, native TLS), parses events (`ical`), converts due times to your local timezone (`chrono`), filters to the next 7 days, and aggregates per source. For auto-complete it opens a hidden Canvas login webview, reads the session cookie, and calls the Canvas planner API to find submitted assignments.
+- **Frontend (vanilla HTML/CSS/JS, `src/`)** — one window per source: the ball, its expandable card, the settings panel, the countdown, and manual drag-vs-click handling.
 
 ## Known limitations
 
 - Assignments whose feed entry has no specific time are assumed due at **23:59 local time**.
-- Data is fetched **on launch only** (periodic auto-refresh is planned).
-- The ICS feed updates on Canvas's own schedule, so it isn't strictly real-time.
+- The ICS feed updates on the provider's own schedule, so it isn't strictly real-time.
+- Auto-complete is **Canvas-only** and needs a one-time login (the session persists between runs); other sources use manual check-off.
+- Windows only for now (it's a Tauri app, so macOS/Linux are possible later).
 
 ## Tech stack
 
-Tauri v2 · Rust · vanilla JS · Canvas ICS calendar feed
+Tauri v2 · Rust · vanilla JS · Canvas ICS feed + planner API
 
 ---
 
-Built as a learning / portfolio project.
+A little thing I made for myself — in memory of the quiz 1 I missed this semester and wasn't allowed to make up. 🥲
