@@ -64,7 +64,39 @@ fn get_source_deadlines(
     source_id: String,
 ) -> Result<Vec<deadlines::Deadline>, String> {
     let dir = cfg_dir(&app)?;
-    Ok(deadlines::deadlines_for(&deadlines::load_config_from(&dir), &source_id))
+    let cfg = deadlines::load_config_from(&dir);
+    Ok(deadlines::deadlines_for(&cfg, &source_id, &load_completed(&app)))
+}
+
+// 已完成的 ddl(本地记录,按 ICS UID)
+fn load_completed(app: &tauri::AppHandle) -> HashSet<String> {
+    let Ok(dir) = cfg_dir(app) else {
+        return HashSet::new();
+    };
+    std::fs::read_to_string(dir.join("completed.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<HashSet<String>>(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_completed(app: &tauri::AppHandle, set: &HashSet<String>) -> Result<(), String> {
+    let dir = cfg_dir(app)?;
+    let json = serde_json::to_string_pretty(set).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("completed.json"), json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mark_done(app: tauri::AppHandle, uid: String) -> Result<(), String> {
+    let mut set = load_completed(&app);
+    set.insert(uid);
+    save_completed(&app, &set)
+}
+
+#[tauri::command]
+fn unmark_done(app: tauri::AppHandle, uid: String) -> Result<(), String> {
+    let mut set = load_completed(&app);
+    set.remove(&uid);
+    save_completed(&app, &set)
 }
 
 #[tauri::command]
@@ -128,7 +160,9 @@ pub fn run() {
             test_source,
             open_url,
             get_position,
-            save_position
+            save_position,
+            mark_done,
+            unmark_done
         ])
         .setup(|app| {
             if let Err(e) = sync_windows(app.handle()) {

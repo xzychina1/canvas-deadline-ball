@@ -1,6 +1,7 @@
 use chrono::{DateTime, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use ical::parser::ical::component::IcalEvent;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::BufReader;
 use std::path::Path;
 
@@ -75,6 +76,7 @@ pub struct Deadline {
     pub title: String,
     pub due: String, // 本地 "MM-DD HH:MM"
     pub due_ms: i64, // Unix 毫秒,给前端做倒计时
+    pub uid: String, // ICS 事件唯一 id,用于"标记完成"
     pub url: String,
 }
 
@@ -84,6 +86,7 @@ struct Raw {
     title: String,
     due: DateTime<Utc>,
     url: String,
+    uid: String,
 }
 
 // ---------- 配置读写(含旧 feed_url.txt 迁移) ----------
@@ -207,7 +210,9 @@ fn fetch_source(src: &Source) -> Result<Vec<Raw>, String> {
             let Some(due) = parse_due(&dtstart) else { continue };
             let (title, course) = interpret(&src.kind, &summary);
             let url = get_prop(&event, "URL").unwrap_or_default();
-            raws.push(Raw { course, title, due, url });
+            let uid =
+                get_prop(&event, "UID").unwrap_or_else(|| format!("{}|{}", summary, dtstart));
+            raws.push(Raw { course, title, due, url, uid });
         }
     }
     Ok(raws)
@@ -215,7 +220,7 @@ fn fetch_source(src: &Source) -> Result<Vec<Raw>, String> {
 
 // ---------- 聚合所有启用的源 ----------
 
-pub fn aggregate(config: &Config) -> Vec<Deadline> {
+pub fn aggregate(config: &Config, completed: &HashSet<String>) -> Vec<Deadline> {
     let now = Utc::now();
     let until = now + chrono::Duration::days(config.window_days);
     let mut all: Vec<(DateTime<Utc>, Deadline)> = Vec::new();
@@ -224,6 +229,9 @@ pub fn aggregate(config: &Config) -> Vec<Deadline> {
         match fetch_source(src) {
             Ok(raws) => {
                 for r in raws {
+                    if completed.contains(&r.uid) {
+                        continue; // 已标记完成,跳过
+                    }
                     all.push((
                         r.due,
                         Deadline {
@@ -233,6 +241,7 @@ pub fn aggregate(config: &Config) -> Vec<Deadline> {
                             title: r.title,
                             due: r.due.with_timezone(&Local).format("%m-%d %H:%M").to_string(),
                             due_ms: r.due.timestamp_millis(),
+                            uid: r.uid,
                             url: r.url,
                         },
                     ));
@@ -251,7 +260,11 @@ pub fn aggregate(config: &Config) -> Vec<Deadline> {
 }
 
 /// 只取某一个源的未来作业(给"每源一个球")
-pub fn deadlines_for(config: &Config, source_id: &str) -> Vec<Deadline> {
+pub fn deadlines_for(
+    config: &Config,
+    source_id: &str,
+    completed: &HashSet<String>,
+) -> Vec<Deadline> {
     let sub = Config {
         sources: config
             .sources
@@ -263,7 +276,7 @@ pub fn deadlines_for(config: &Config, source_id: &str) -> Vec<Deadline> {
         refresh_minutes: config.refresh_minutes,
         lang: config.lang.clone(),
     };
-    aggregate(&sub)
+    aggregate(&sub, completed)
 }
 
 // ---------- 测试一个源(设置面板的"测试"按钮):返回解析到的事件总数 ----------

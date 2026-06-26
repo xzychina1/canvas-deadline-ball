@@ -25,7 +25,7 @@ const I18N = {
     noDdl: "未来 7 天没有 ddl 🎉", noSources: "还没有源,下面添加一个",
     needUrl: "先填链接", testing: "测试中…", testFail: "✗ 失败:",
     needNameUrl: "名字和链接都要填", added: "已添加,记得点保存",
-    saveFail: "保存失败:", enabled: "启用", del: "删除", collapse: "收起",
+    saveFail: "保存失败:", enabled: "启用", del: "删除", collapse: "收起", markDone: "标记完成",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
   },
   en: {
@@ -38,7 +38,7 @@ const I18N = {
     noDdl: "Nothing due in 7 days 🎉", noSources: "No sources yet — add one below",
     needUrl: "Enter a URL first", testing: "Testing…", testFail: "✗ Failed: ",
     needNameUrl: "Name and URL are required", added: "Added — remember to Save",
-    saveFail: "Save failed: ", enabled: "Enabled", del: "Delete", collapse: "Collapse",
+    saveFail: "Save failed: ", enabled: "Enabled", del: "Delete", collapse: "Collapse", markDone: "Mark done",
     testOk: (n) => `✓ OK — parsed ${n} events`,
   },
 };
@@ -118,11 +118,27 @@ function renderBallAndList() {
     row.className = "item";
     row.style.borderLeftColor = it.color || "#e23b3b";
     const tag = it.course && it.course.length ? it.course : it.source;
-    row.innerHTML =
+
+    const main = document.createElement("div");
+    main.className = "row-main";
+    main.innerHTML =
       `<div class="when">${esc(it.due)}</div>` +
       `<div class="what"><span class="tag" style="color:${esc(it.color)}">${esc(tag)}</span>${esc(it.title)}</div>`;
-    if (it.url) row.addEventListener("click", () => invoke("open_url", { url: it.url }));
-    else row.style.cursor = "default";
+    if (it.url) main.addEventListener("click", () => invoke("open_url", { url: it.url }));
+    else main.style.cursor = "default";
+
+    const done = document.createElement("button");
+    done.className = "done-btn";
+    done.textContent = "✓";
+    done.title = t("markDone");
+    done.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await invoke("mark_done", { uid: it.uid });
+      await refresh();
+    });
+
+    row.appendChild(main);
+    row.appendChild(done);
     listEl.appendChild(row);
   }
 }

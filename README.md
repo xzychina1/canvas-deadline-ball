@@ -5,7 +5,11 @@
 A tiny always-on-top desktop floating ball that shows your upcoming **Canvas** assignment
 deadlines — so you can glance at what's due this week without ever opening Canvas.
 
-<!-- TODO: add a screenshot or GIF here, e.g. ![demo](docs/demo.gif) — strongly recommended for a portfolio repo -->
+<p align="center">
+  <img src="docs/balls.png" width="420" alt="Two deadline balls on the desktop" /><br />
+  <img src="docs/detail1.png" width="280" alt="Expanded deadline list" />
+  <img src="docs/setting1.png" width="280" alt="Settings panel" />
+</p>
 
 ## Why
 

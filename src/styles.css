@@ -32,7 +32,7 @@ body {
   border-radius: 50%;
   background: #26262b;
   border: 4px solid #e23b3b;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -134,13 +134,37 @@ body {
   padding: 6px;
 }
 .item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
   border-left: 3px solid transparent;
-  cursor: pointer;
 }
 .item:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+.row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+.done-btn {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #9ad36b;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+.done-btn:hover {
+  background: #3ad36b;
+  color: #fff;
+  border-color: #3ad36b;
 }
 .item .when {
   font-size: 12px;

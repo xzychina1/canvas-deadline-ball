@@ -4,7 +4,11 @@
 
 一个常驻桌面、永远置顶的悬浮球,显示你 **Canvas** 上即将到期的作业 —— 不用打开 Canvas,扫一眼桌面就知道这周要交什么。
 
-<!-- TODO: 在这里放一张球的截图或 GIF,例如 ![demo](docs/demo.gif) —— 作品集强烈建议加 -->
+<p align="center">
+  <img src="docs/balls.png" width="420" alt="桌面上的两个 ddl 球" /><br />
+  <img src="docs/detail1.png" width="280" alt="展开的作业列表" />
+  <img src="docs/setting1.png" width="280" alt="设置面板" />
+</p>
 
 ## 为什么做它
 
