@@ -382,7 +382,10 @@ async function saveSettings() {
 function resetTimer() {
   if (refreshTimer) clearInterval(refreshTimer);
   const ms = Math.max(1, config.refreshMinutes) * 60 * 1000;
-  refreshTimer = setInterval(refresh, ms);
+  refreshTimer = setInterval(async () => {
+    if (isCanvasBall()) await autoSyncCanvas();
+    await refresh();
+  }, ms);
 }
 
 // ---------- 拖动 vs 点击 ----------
@@ -431,6 +434,30 @@ async function setupPosition() {
   });
 }
 
+// ---------- Canvas 自动完成 ----------
+function canvasBase() {
+  const c = (config.sources || []).find((s) => s.kind === "canvas");
+  try {
+    return c ? new URL(c.url).origin : null;
+  } catch (_) {
+    return null;
+  }
+}
+function isCanvasBall() {
+  const me = (config.sources || []).find((s) => s.id === sourceId);
+  return !!(me && me.kind === "canvas");
+}
+// 静默自动同步:从任意窗口读已存的登录 cookie,标记已交作业完成
+async function autoSyncCanvas() {
+  const base = canvasBase();
+  if (!base) return;
+  try {
+    await invoke("canvas_autosync", { baseUrl: base });
+  } catch (_) {
+    /* 未登录 / 离线 → 静默忽略 */
+  }
+}
+
 async function reloadConfig() {
   try {
     config = await invoke("get_config");
@@ -466,15 +493,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("add-test").addEventListener("click", testSource);
   document.getElementById("add-btn").addEventListener("click", addSource);
 
-  // Canvas 自动完成(实验):开登录窗 + 测试认证
-  const canvasBase = () => {
-    const c = (config.sources || []).find((s) => s.kind === "canvas");
-    try {
-      return c ? new URL(c.url).origin : null;
-    } catch (_) {
-      return null;
-    }
-  };
+  // Canvas 自动完成:按钮
   document.getElementById("canvas-login-btn").addEventListener("click", async () => {
     const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
@@ -517,7 +536,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     msg.textContent = "同步中…";
     try {
-      const n = await invoke("canvas_sync_done", { baseUrl: base });
+      const n = await invoke("canvas_autosync", { baseUrl: base });
       msg.textContent = `✓ 同步完成,标记了 ${n} 个新完成`;
       await refresh();
     } catch (e) {
@@ -535,6 +554,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   applyLang();
   resetTimer();
   await refresh();
+  if (isCanvasBall()) {
+    await autoSyncCanvas(); // 启动时自动同步一次(用已存登录态)
+    await refresh();
+  }
   setInterval(tick, 1000);
 
   await listen("config-changed", async () => {

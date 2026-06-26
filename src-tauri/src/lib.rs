@@ -151,6 +151,12 @@ fn save_position(app: tauri::AppHandle, label: String, x: i32, y: i32) -> Result
 
 // ---------- Canvas 登录 + API(自动完成检测,实验) ----------
 
+// 读 cookie 用任意 webview 窗口即可(WebView2 全应用共享 cookie store)
+fn any_webview(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
+    app.get_webview_window("canvas-login")
+        .or_else(|| app.webview_windows().into_values().next())
+}
+
 #[tauri::command]
 async fn open_canvas_login(app: tauri::AppHandle, base_url: String) -> Result<(), String> {
     if app.get_webview_window("canvas-login").is_some() {
@@ -172,9 +178,7 @@ async fn canvas_api(
     base_url: String,
     path: String,
 ) -> Result<String, String> {
-    let win = app
-        .get_webview_window("canvas-login")
-        .ok_or_else(|| "未登录:请先点「登录 Canvas」".to_string())?;
+    let win = any_webview(&app).ok_or_else(|| "no webview".to_string())?;
     let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
     let cookies = win.cookies_for_url(url).map_err(|e| e.to_string())?;
     if cookies.is_empty() {
@@ -243,6 +247,31 @@ async fn canvas_sync_done(app: tauri::AppHandle, base_url: String) -> Result<usi
     Ok(n)
 }
 
+// 自动同步:cookie 是按窗口隔离的,所以临时开一个隐藏 canvas-login 窗口
+// (从磁盘加载已存登录态)→ 读 cookie 同步 → 用完关掉。
+#[tauri::command]
+async fn canvas_autosync(app: tauri::AppHandle, base_url: String) -> Result<usize, String> {
+    let created = app.get_webview_window("canvas-login").is_none();
+    if created {
+        let url: tauri::Url = base_url.parse().map_err(|e| format!("bad url: {}", e))?;
+        WebviewWindowBuilder::new(&app, "canvas-login", WebviewUrl::External(url))
+            .title("Canvas")
+            .inner_size(420.0, 600.0)
+            .visible(false)
+            .build()
+            .map_err(|e| e.to_string())?;
+        // 等 webview 从磁盘加载好持久化的 cookie
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+    }
+    let result = canvas_sync_done(app.clone(), base_url).await;
+    if created {
+        if let Some(w) = app.get_webview_window("canvas-login") {
+            let _ = w.close();
+        }
+    }
+    result
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -259,7 +288,8 @@ pub fn run() {
             unmark_done,
             open_canvas_login,
             canvas_api,
-            canvas_sync_done
+            canvas_sync_done,
+            canvas_autosync
         ])
         .setup(|app| {
             if let Err(e) = sync_windows(app.handle()) {
