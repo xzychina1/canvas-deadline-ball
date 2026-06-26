@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Canvas Deadline Ball</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+  <body>
+    <!-- 收起态:球 -->
+    <div id="ball">
+      <div id="count">—</div>
+      <div id="label">ddl</div>
+    </div>
+
+    <!-- 展开态:卡片 -->
+    <div id="card" hidden>
+      <div id="card-header">未来 7 天 · <span id="card-count">0</span>（点此收起）</div>
+      <div id="list"></div>
+    </div>
+  </body>
+</html>

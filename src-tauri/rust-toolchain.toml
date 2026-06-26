@@ -1,0 +1,3 @@
+# Tauri 在 Windows 上需要 MSVC 工具链;只对本项目生效,不动全局默认(zydeco 用 GNU)
+[toolchain]
+channel = "stable-x86_64-pc-windows-msvc"
