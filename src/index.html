@@ -10,15 +10,20 @@
   <body>
     <!-- 收起态:球 -->
     <div id="ball">
+      <div id="ball-source"></div>
       <div id="count">—</div>
-      <div id="label">ddl</div>
+      <div id="label">--:--:--</div>
     </div>
 
     <!-- 展开态:卡片 -->
     <div id="card" hidden>
       <div id="card-header">
-        <span id="header-title"><span id="header-name">未来 7 天</span> · <span id="card-count">0</span></span>
-        <span id="gear" title="设置">⚙</span>
+        <span id="header-title"
+          ><span id="header-name">未来 7 天</span> ·
+          <span id="card-count">0</span> ·
+          <span id="card-countdown">--:--:--</span></span
+        >
+        <span id="gear">⚙</span>
       </div>
 
       <!-- 列表视图 -->
@@ -30,33 +35,44 @@
       <div id="settings-view" hidden>
         <div class="settings-scroll">
           <div class="field">
-            <label>刷新间隔(分钟)</label>
+            <label data-i18n="language">语言</label>
+            <select id="lang-select">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+          <div class="field">
+            <label data-i18n="refreshInterval">刷新间隔(分钟)</label>
             <input id="refresh-input" type="number" min="1" value="30" />
           </div>
 
-          <div class="section-title">数据源</div>
+          <div class="section-title" data-i18n="sources">数据源</div>
           <div id="source-list"></div>
 
-          <div class="section-title">添加源</div>
+          <div class="section-title" data-i18n="addSource">添加源</div>
           <div class="add-form">
-            <input id="add-name" placeholder="名字(如 Canvas)" />
-            <input id="add-url" placeholder="ICS 链接 https://....ics" />
+            <input id="add-name" data-i18n-ph="namePh" placeholder="名字(如 Canvas)" />
+            <input
+              id="add-url"
+              data-i18n-ph="urlPh"
+              placeholder="ICS 链接 https://....ics"
+            />
             <div class="add-row2">
               <select id="add-kind">
                 <option value="canvas">Canvas</option>
                 <option value="google">Google Calendar</option>
-                <option value="ics">通用 ICS</option>
+                <option value="ics" data-i18n="genericIcs">通用 ICS</option>
               </select>
               <input id="add-color" type="color" value="#e23b3b" />
-              <button id="add-test">测试</button>
-              <button id="add-btn">添加</button>
+              <button id="add-test" data-i18n="test">测试</button>
+              <button id="add-btn" data-i18n="add">添加</button>
             </div>
             <div id="add-msg" class="msg"></div>
           </div>
         </div>
         <div class="settings-foot">
-          <button id="settings-back">← 返回</button>
-          <button id="settings-save" class="primary">保存</button>
+          <button id="settings-back" data-i18n="back">← 返回</button>
+          <button id="settings-save" class="primary" data-i18n="save">保存</button>
         </div>
       </div>
     </div>

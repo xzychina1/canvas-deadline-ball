@@ -1,6 +1,6 @@
 mod deadlines;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 fn cfg_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -10,7 +10,7 @@ fn cfg_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 // 创建一个球窗口(透明/无边框/置顶/不可缩放/不进任务栏)
 fn build_ball(app: &tauri::AppHandle, label: &str, x: f64, y: f64) -> Result<(), String> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
-        .inner_size(100.0, 100.0)
+        .inner_size(130.0, 130.0)
         .position(x, y)
         .transparent(true)
         .decorations(false)
@@ -95,6 +95,28 @@ fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+// 球的位置持久化(positions.json,按窗口标签存物理坐标)
+#[tauri::command]
+fn get_position(app: tauri::AppHandle, label: String) -> Option<[i32; 2]> {
+    let dir = cfg_dir(&app).ok()?;
+    let s = std::fs::read_to_string(dir.join("positions.json")).ok()?;
+    let map: HashMap<String, [i32; 2]> = serde_json::from_str(&s).ok()?;
+    map.get(&label).copied()
+}
+
+#[tauri::command]
+fn save_position(app: tauri::AppHandle, label: String, x: i32, y: i32) -> Result<(), String> {
+    let dir = cfg_dir(&app)?;
+    let path = dir.join("positions.json");
+    let mut map: HashMap<String, [i32; 2]> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    map.insert(label, [x, y]);
+    let json = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -104,7 +126,9 @@ pub fn run() {
             get_config,
             save_config,
             test_source,
-            open_url
+            open_url,
+            get_position,
+            save_position
         ])
         .setup(|app| {
             if let Err(e) = sync_windows(app.handle()) {

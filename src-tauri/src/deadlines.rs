@@ -39,6 +39,8 @@ pub struct Config {
     pub window_days: i64,
     #[serde(default = "default_refresh")]
     pub refresh_minutes: u64,
+    #[serde(default = "default_lang")]
+    pub lang: String,
 }
 
 fn default_window() -> i64 {
@@ -47,6 +49,9 @@ fn default_window() -> i64 {
 fn default_refresh() -> u64 {
     30
 }
+fn default_lang() -> String {
+    "zh".to_string()
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -54,6 +59,7 @@ impl Default for Config {
             sources: Vec::new(),
             window_days: 7,
             refresh_minutes: 30,
+            lang: "zh".to_string(),
         }
     }
 }
@@ -61,12 +67,14 @@ impl Default for Config {
 // ---------- 发给前端的一条 ddl ----------
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Deadline {
     pub source: String,
     pub color: String,
     pub course: String,
     pub title: String,
     pub due: String, // 本地 "MM-DD HH:MM"
+    pub due_ms: i64, // Unix 毫秒,给前端做倒计时
     pub url: String,
 }
 
@@ -101,6 +109,7 @@ pub fn load_config_from(dir: &Path) -> Config {
                 }],
                 window_days: 7,
                 refresh_minutes: 30,
+                lang: "zh".to_string(),
             };
             let _ = save_config_to(dir, &cfg);
             return cfg;
@@ -223,6 +232,7 @@ pub fn aggregate(config: &Config) -> Vec<Deadline> {
                             course: r.course,
                             title: r.title,
                             due: r.due.with_timezone(&Local).format("%m-%d %H:%M").to_string(),
+                            due_ms: r.due.timestamp_millis(),
                             url: r.url,
                         },
                     ));
@@ -251,6 +261,7 @@ pub fn deadlines_for(config: &Config, source_id: &str) -> Vec<Deadline> {
             .collect(),
         window_days: config.window_days,
         refresh_minutes: config.refresh_minutes,
+        lang: config.lang.clone(),
     };
     aggregate(&sub)
 }
