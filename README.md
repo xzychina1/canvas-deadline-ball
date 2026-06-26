@@ -31,7 +31,10 @@ Canvas is fine, but you have to *go look*. This lives on your desktop instead: a
    - **Google Calendar**: *Settings and sharing → Integrate calendar → Secret address in iCal format*.
    > ⚠️ Treat these URLs like a password — anyone who has one can read your calendar. You can reset it if it leaks.
 2. **Add it in the app**: click the ball → ⚙ settings → paste the URL, pick a kind (Canvas / Google / generic ICS) and a color → **Test** → **Add** → **Save**. A ball appears for that source.
-3. *(optional)* **Canvas auto-complete**: in settings, **log in to Canvas** once. From then on the app reads your submitted assignments via the Canvas API using your logged-in session and checks them off automatically. Handy when your school blocks API tokens (e.g. UMich) — it works through the normal web login, like a campus-VPN sign-in. *Canvas only; other calendars stay manual check-off.*
+3. *(optional)* **Canvas auto-complete**: in settings, **log in to Canvas** once. From then on the app reads your submitted assignments via the Canvas API using your logged-in session and checks them off automatically. Handy when your school blocks API tokens (e.g. UMich) — it works through the normal web login, like a campus-VPN sign-in.
+   > **Which Canvas does it log into?** *Yours.* The site URL is taken automatically from your Canvas ICS link, so it always points at your own school — nothing is hard-coded. Don't want to set up an ICS source, or does your Canvas live on a different host? Just type it into the **Canvas URL** box in settings, e.g. `https://yourschool.instructure.com`.
+   >
+   > *Canvas only; other calendars stay manual check-off.*
 
 ## Build from source
 
@@ -55,11 +58,16 @@ npm run tauri build    # produce a release installer
 - Assignments whose feed entry has no specific time are assumed due at **23:59 local time**.
 - The ICS feed updates on the provider's own schedule, so it isn't strictly real-time.
 - Auto-complete is **Canvas-only** and needs a one-time login (the session persists between runs); other sources use manual check-off.
+- **Multiple Canvas schools:** auto-complete points at one Canvas at a time, and completed items are matched by Canvas assignment ID — which is only unique *within* a school. Juggling two Canvas accounts can occasionally cross wires; a single school works perfectly.
 - Windows only for now (it's a Tauri app, so macOS/Linux are possible later).
 
 ## Tech stack
 
 Tauri v2 · Rust · vanilla JS · Canvas ICS feed + planner API
+
+## Contributing / Issues
+
+Found a bug, hit a setup snag, or want it on **macOS / Linux** — or a calendar source it doesn't handle yet? Please [open an issue](../../issues). Usage questions and "please support X" requests are genuinely welcome — this is a small personal project, so what people ask for is what gets built next.
 
 ---
 

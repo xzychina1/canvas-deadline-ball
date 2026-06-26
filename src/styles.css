@@ -260,6 +260,13 @@ body {
   min-height: 14px;
 }
 
+.hint {
+  font-size: 10px;
+  color: #777;
+  margin: 2px 0 4px;
+  line-height: 1.3;
+}
+
 input,
 select,
 button {

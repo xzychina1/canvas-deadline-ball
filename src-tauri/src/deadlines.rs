@@ -42,6 +42,10 @@ pub struct Config {
     pub refresh_minutes: u64,
     #[serde(default = "default_lang")]
     pub lang: String,
+    // 可选:手填的 Canvas 站点网址(给不想配 ICS、只想用登录/自动完成的人)。
+    // 留空则前端自动取自第一个 canvas 源的链接。
+    #[serde(default)]
+    pub canvas_base_url: String,
 }
 
 fn default_window() -> i64 {
@@ -61,6 +65,7 @@ impl Default for Config {
             window_days: 7,
             refresh_minutes: 30,
             lang: "zh".to_string(),
+            canvas_base_url: String::new(),
         }
     }
 }
@@ -113,6 +118,7 @@ pub fn load_config_from(dir: &Path) -> Config {
                 window_days: 7,
                 refresh_minutes: 30,
                 lang: "zh".to_string(),
+                canvas_base_url: String::new(),
             };
             let _ = save_config_to(dir, &cfg);
             return cfg;
@@ -293,6 +299,7 @@ pub fn deadlines_for(
         window_days: config.window_days,
         refresh_minutes: config.refresh_minutes,
         lang: config.lang.clone(),
+        canvas_base_url: config.canvas_base_url.clone(),
     };
     aggregate(&sub, completed)
 }

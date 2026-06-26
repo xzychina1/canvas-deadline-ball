@@ -10,7 +10,7 @@ const LABEL = appWindow.label;
 const sourceId = LABEL.startsWith("ball::") ? LABEL.slice("ball::".length) : null;
 
 let items = []; // 当前 ddl(null = 出错)
-let config = { sources: [], windowDays: 7, refreshMinutes: 30, lang: "zh" };
+let config = { sources: [], windowDays: 7, refreshMinutes: 30, lang: "zh", canvasBaseUrl: "" };
 let state = "ball";
 let refreshTimer = null;
 
@@ -26,6 +26,9 @@ const I18N = {
     needUrl: "先填链接", testing: "测试中…", testFail: "✗ 失败:",
     needNameUrl: "名字和链接都要填", added: "已添加,记得点保存",
     saveFail: "保存失败:", enabled: "启用", del: "删除", collapse: "收起", markDone: "标记完成",
+    canvasUrlPh: "Canvas 网址 https://xxx.instructure.com",
+    canvasUrlHint: "留空则自动取自上面的 Canvas 源链接",
+    needCanvas: "先填 Canvas 网址,或在上面添加一个 Canvas 源",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
   },
   en: {
@@ -39,6 +42,9 @@ const I18N = {
     needUrl: "Enter a URL first", testing: "Testing…", testFail: "✗ Failed: ",
     needNameUrl: "Name and URL are required", added: "Added — remember to Save",
     saveFail: "Save failed: ", enabled: "Enabled", del: "Delete", collapse: "Collapse", markDone: "Mark done",
+    canvasUrlPh: "Canvas URL https://xxx.instructure.com",
+    canvasUrlHint: "Leave blank to use your Canvas source's URL above",
+    needCanvas: "Enter a Canvas URL, or add a Canvas source above",
     testOk: (n) => `✓ OK — parsed ${n} events`,
   },
 };
@@ -248,6 +254,8 @@ async function setState(s) {
 // ---------- 设置面板 ----------
 function renderSettings() {
   document.getElementById("refresh-input").value = config.refreshMinutes;
+  const cb = document.getElementById("canvas-base");
+  if (cb) cb.value = config.canvasBaseUrl || "";
   const wrap = document.getElementById("source-list");
   wrap.innerHTML = "";
   if (!config.sources.length) {
@@ -365,6 +373,8 @@ async function saveSettings() {
     parseInt(document.getElementById("refresh-input").value, 10) || 30,
   );
   config.lang = lang;
+  const cb = document.getElementById("canvas-base");
+  if (cb) config.canvasBaseUrl = cb.value.trim();
   try {
     await invoke("save_config", { config });
   } catch (e) {
@@ -436,6 +446,15 @@ async function setupPosition() {
 
 // ---------- Canvas 自动完成 ----------
 function canvasBase() {
+  // 优先用手填的网址(不想配 ICS 也能用登录/自动完成);否则取第一个 canvas 源的链接
+  const manual = (config.canvasBaseUrl || "").trim();
+  if (manual) {
+    try {
+      return new URL(manual.includes("://") ? manual : "https://" + manual).origin;
+    } catch (_) {
+      /* 填得不对就往下走 */
+    }
+  }
   const c = (config.sources || []).find((s) => s.kind === "canvas");
   try {
     return c ? new URL(c.url).origin : null;
@@ -498,7 +517,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
-      msg.textContent = "先添加一个 Canvas 源";
+      msg.textContent = t("needCanvas");
       return;
     }
     try {
@@ -512,7 +531,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
-      msg.textContent = "先添加一个 Canvas 源";
+      msg.textContent = t("needCanvas");
       return;
     }
     msg.textContent = "测试中…";
@@ -531,7 +550,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
-      msg.textContent = "先添加一个 Canvas 源";
+      msg.textContent = t("needCanvas");
       return;
     }
     msg.textContent = "同步中…";
