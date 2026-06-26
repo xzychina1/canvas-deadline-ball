@@ -25,7 +25,7 @@ const I18N = {
     noDdl: "未来 7 天没有 ddl 🎉", noSources: "还没有源,下面添加一个",
     needUrl: "先填链接", testing: "测试中…", testFail: "✗ 失败:",
     needNameUrl: "名字和链接都要填", added: "已添加,记得点保存",
-    saveFail: "保存失败:", enabled: "启用", del: "删除",
+    saveFail: "保存失败:", enabled: "启用", del: "删除", collapse: "收起",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
   },
   en: {
@@ -38,7 +38,7 @@ const I18N = {
     noDdl: "Nothing due in 7 days 🎉", noSources: "No sources yet — add one below",
     needUrl: "Enter a URL first", testing: "Testing…", testFail: "✗ Failed: ",
     needNameUrl: "Name and URL are required", added: "Added — remember to Save",
-    saveFail: "Save failed: ", enabled: "Enabled", del: "Delete",
+    saveFail: "Save failed: ", enabled: "Enabled", del: "Delete", collapse: "Collapse",
     testOk: (n) => `✓ OK — parsed ${n} events`,
   },
 };
@@ -226,6 +226,7 @@ async function setState(s) {
   document.getElementById("list-view").hidden = s !== "list";
   document.getElementById("settings-view").hidden = s !== "settings";
   document.getElementById("gear").hidden = s !== "list";
+  document.getElementById("collapse").hidden = s !== "list";
 }
 
 // ---------- 设置面板 ----------
@@ -426,9 +427,8 @@ async function reloadConfig() {
 // ---------- 初始化 ----------
 window.addEventListener("DOMContentLoaded", async () => {
   makeDragClick(document.getElementById("ball"), () => setState("list"));
-  makeDragClick(document.getElementById("card-header"), () => {
-    if (state === "list") setState("ball");
-  });
+  // 顶栏只负责拖动;收起用 ← 按钮
+  makeDragClick(document.getElementById("card-header"), () => {});
 
   const gear = document.getElementById("gear");
   ["mousedown", "mouseup", "click"].forEach((ev) =>
@@ -438,6 +438,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderSettings();
     setState("settings");
   });
+
+  const collapse = document.getElementById("collapse");
+  ["mousedown", "mouseup", "click"].forEach((ev) =>
+    collapse.addEventListener(ev, (e) => e.stopPropagation()),
+  );
+  collapse.addEventListener("click", () => setState("ball"));
 
   document.getElementById("settings-back").addEventListener("click", () => setState("list"));
   document.getElementById("settings-save").addEventListener("click", saveSettings);
