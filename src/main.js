@@ -1,10 +1,15 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
+const { listen } = window.__TAURI__.event;
 const appWindow = getCurrentWindow();
 
 const SIZES = { ball: [100, 100], list: [300, 420], settings: [340, 520] };
 
-let items = []; // 当前 ddl 列表(null = 出错)
+// 本窗口代表哪个源:标签 "ball::<id>" → id;"setup" → null(无源,直接开设置)
+const LABEL = appWindow.label;
+const sourceId = LABEL.startsWith("ball::") ? LABEL.slice("ball::".length) : null;
+
+let items = []; // 当前 ddl(null = 出错)
 let config = { sources: [], windowDays: 7, refreshMinutes: 30 };
 let state = "ball";
 let refreshTimer = null;
@@ -16,12 +21,17 @@ function esc(s) {
   );
 }
 
-// ---------- 数据 ----------
+// ---------- 数据(只拉本源) ----------
 async function refresh() {
+  if (sourceId === null) {
+    items = [];
+    renderBallAndList();
+    return;
+  }
   try {
-    items = await invoke("get_deadlines");
+    items = await invoke("get_source_deadlines", { sourceId });
   } catch (e) {
-    console.error("get_deadlines failed:", e);
+    console.error("get_source_deadlines failed:", e);
     items = null;
   }
   renderBallAndList();
@@ -64,7 +74,18 @@ function renderBallAndList() {
   }
 }
 
-// ---------- 视图状态(ball / list / settings) ----------
+// 用本源的颜色 + 名字装扮这个球
+function applyIdentity() {
+  const me = (config.sources || []).find((s) => s.id === sourceId);
+  const color = me ? me.color : "#e23b3b";
+  const name = me ? me.name : "未来 7 天";
+  document.getElementById("ball").style.background =
+    `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), ${color})`;
+  document.getElementById("card-header").style.background = color;
+  document.getElementById("header-name").textContent = name;
+}
+
+// ---------- 视图状态 ----------
 async function setState(s) {
   state = s;
   await appWindow.setSize(new LogicalSize(...SIZES[s]));
@@ -75,7 +96,7 @@ async function setState(s) {
   document.getElementById("gear").hidden = s !== "list";
 }
 
-// ---------- 设置面板 ----------
+// ---------- 设置面板(编辑全局配置) ----------
 function renderSettings() {
   document.getElementById("refresh-input").value = config.refreshMinutes;
   const wrap = document.getElementById("source-list");
@@ -158,14 +179,14 @@ async function saveSettings() {
     parseInt(document.getElementById("refresh-input").value, 10) || 30,
   );
   try {
+    // 后端会同步窗口集合 + 广播 config-changed(各球自行重载)
     await invoke("save_config", { config });
   } catch (e) {
     document.getElementById("add-msg").textContent = "保存失败:" + e;
     return;
   }
-  resetTimer();
-  await refresh();
-  await setState("list");
+  // 本源还在就回列表(setup 窗口会被后端关掉,无所谓)
+  await setState(sourceId ? "list" : "settings");
 }
 
 // ---------- 自动刷新 ----------
@@ -203,13 +224,20 @@ function makeDragClick(el, onClick) {
 }
 
 // ---------- 初始化 ----------
+async function reloadConfig() {
+  try {
+    config = await invoke("get_config");
+  } catch (e) {
+    console.error("get_config failed:", e);
+  }
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   makeDragClick(document.getElementById("ball"), () => setState("list"));
   makeDragClick(document.getElementById("card-header"), () => {
     if (state === "list") setState("ball");
   });
 
-  // 齿轮:打开设置(阻止冒泡到 header 的拖动/折叠)
   const gear = document.getElementById("gear");
   ["mousedown", "mouseup", "click"].forEach((ev) =>
     gear.addEventListener(ev, (e) => e.stopPropagation()),
@@ -228,19 +256,22 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("add-test").addEventListener("click", testSource);
   document.getElementById("add-btn").addEventListener("click", addSource);
 
-  // 加载配置
-  try {
-    config = await invoke("get_config");
-  } catch (e) {
-    console.error("get_config failed:", e);
-  }
+  await reloadConfig();
+  applyIdentity();
   resetTimer();
   await refresh();
 
-  // 首次运行没有源 → 直接打开设置
-  if (!config.sources || config.sources.length === 0) {
+  // 任何窗口保存配置后,所有球重载
+  await listen("config-changed", async () => {
+    await reloadConfig();
+    applyIdentity();
+    resetTimer();
+    await refresh();
+  });
+
+  if (sourceId === null) {
     renderSettings();
-    await setState("settings");
+    await setState("settings"); // setup 窗口:直接开设置
   } else {
     await setState("ball");
   }

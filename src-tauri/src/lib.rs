@@ -1,16 +1,70 @@
 mod deadlines;
 
-use tauri::Manager;
+use std::collections::HashSet;
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 fn cfg_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path().app_config_dir().map_err(|e| e.to_string())
 }
 
-// 聚合所有启用源的未来作业(首次会把旧 feed_url.txt 迁移成 config.json)
+// 创建一个球窗口(透明/无边框/置顶/不可缩放/不进任务栏)
+fn build_ball(app: &tauri::AppHandle, label: &str, x: f64, y: f64) -> Result<(), String> {
+    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .inner_size(100.0, 100.0)
+        .position(x, y)
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .resizable(false)
+        .skip_taskbar(true)
+        .shadow(false)
+        .title("Canvas Deadline Ball")
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// 让窗口集合与配置一致:每个启用源一个球;无源时给一个 setup 窗口开设置
+fn sync_windows(app: &tauri::AppHandle) -> Result<(), String> {
+    let dir = cfg_dir(app)?;
+    let cfg = deadlines::load_config_from(&dir);
+    let enabled: Vec<_> = cfg.sources.iter().filter(|s| s.enabled).collect();
+    let desired: HashSet<String> = enabled.iter().map(|s| format!("ball::{}", s.id)).collect();
+
+    // 关掉不再需要的球
+    for (label, win) in app.webview_windows() {
+        if label.starts_with("ball::") && !desired.contains(&label) {
+            let _ = win.close();
+        }
+    }
+
+    if enabled.is_empty() {
+        if app.get_webview_window("setup").is_none() {
+            build_ball(app, "setup", 200.0, 200.0)?;
+        }
+        return Ok(());
+    }
+    if let Some(w) = app.get_webview_window("setup") {
+        let _ = w.close();
+    }
+
+    // 创建缺失的球(错开位置)
+    for (i, s) in enabled.iter().enumerate() {
+        let label = format!("ball::{}", s.id);
+        if app.get_webview_window(&label).is_none() {
+            build_ball(app, &label, 200.0 + i as f64 * 120.0, 200.0)?;
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
-fn get_deadlines(app: tauri::AppHandle) -> Result<Vec<deadlines::Deadline>, String> {
+fn get_source_deadlines(
+    app: tauri::AppHandle,
+    source_id: String,
+) -> Result<Vec<deadlines::Deadline>, String> {
     let dir = cfg_dir(&app)?;
-    Ok(deadlines::aggregate(&deadlines::load_config_from(&dir)))
+    Ok(deadlines::deadlines_for(&deadlines::load_config_from(&dir), &source_id))
 }
 
 #[tauri::command]
@@ -22,16 +76,24 @@ fn get_config(app: tauri::AppHandle) -> Result<deadlines::Config, String> {
 #[tauri::command]
 fn save_config(app: tauri::AppHandle, config: deadlines::Config) -> Result<(), String> {
     let dir = cfg_dir(&app)?;
-    deadlines::save_config_to(&dir, &config)
+    deadlines::save_config_to(&dir, &config)?;
+    // 窗口创建必须在主线程,从命令线程直接调用 sync_windows 会死锁
+    let app2 = app.clone();
+    app.run_on_main_thread(move || {
+        if let Err(e) = sync_windows(&app2) {
+            eprintln!("sync_windows failed: {}", e);
+        }
+        let _ = app2.emit("config-changed", ()); // 让所有球重载
+    })
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
-// 设置面板用:试拉一个源,返回解析到的事件数
 #[tauri::command]
 fn test_source(url: String, kind: String) -> Result<usize, String> {
     deadlines::test_source(&url, &kind)
 }
 
-// 用默认浏览器打开作业链接
 #[tauri::command]
 fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -45,12 +107,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            get_deadlines,
+            get_source_deadlines,
             get_config,
             save_config,
             test_source,
             open_url
         ])
+        .setup(|app| {
+            if let Err(e) = sync_windows(app.handle()) {
+                eprintln!("sync_windows failed: {}", e);
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

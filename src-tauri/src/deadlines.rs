@@ -127,10 +127,19 @@ fn get_prop(event: &IcalEvent, name: &str) -> Option<String> {
 
 fn parse_due(s: &str) -> Option<DateTime<Utc>> {
     if s.contains('T') {
-        NaiveDateTime::parse_from_str(s, "%Y%m%dT%H%M%SZ")
-            .ok()
-            .map(|dt| dt.and_utc())
+        // 先试 UTC("...Z");再试无 Z 的本地时间(Google Calendar 用 TZID 时常见)
+        if let Ok(dt) = NaiveDateTime::parse_from_str(s, "%Y%m%dT%H%M%SZ") {
+            return Some(dt.and_utc());
+        }
+        if let Ok(naive) = NaiveDateTime::parse_from_str(s, "%Y%m%dT%H%M%S") {
+            return Local
+                .from_local_datetime(&naive)
+                .single()
+                .map(|l| l.with_timezone(&Utc));
+        }
+        None
     } else {
+        // 只有日期:补当天 23:59,按本地时区解释
         NaiveDate::parse_from_str(s, "%Y%m%d")
             .ok()
             .and_then(|d| d.and_hms_opt(23, 59, 0))
@@ -229,6 +238,21 @@ pub fn aggregate(config: &Config) -> Vec<Deadline> {
         .filter(|(d, _)| *d >= now && *d <= until)
         .map(|(_, dl)| dl)
         .collect()
+}
+
+/// 只取某一个源的未来作业(给"每源一个球")
+pub fn deadlines_for(config: &Config, source_id: &str) -> Vec<Deadline> {
+    let sub = Config {
+        sources: config
+            .sources
+            .iter()
+            .filter(|s| s.id == source_id)
+            .cloned()
+            .collect(),
+        window_days: config.window_days,
+        refresh_minutes: config.refresh_minutes,
+    };
+    aggregate(&sub)
 }
 
 // ---------- 测试一个源(设置面板的"测试"按钮):返回解析到的事件总数 ----------
