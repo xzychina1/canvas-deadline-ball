@@ -25,6 +25,7 @@
         >
         <span class="header-btns">
           <span id="collapse" data-i18n="back">← 返回</span>
+          <span id="help">📖</span>
           <span id="gear">⚙</span>
         </span>
       </div>
@@ -37,6 +38,7 @@
       <!-- 设置视图 -->
       <div id="settings-view" hidden>
         <div class="settings-scroll">
+          <button id="open-guide" class="guide-link" data-i18n="guide">📖 使用说明</button>
           <div class="field">
             <label data-i18n="language">语言</label>
             <select id="lang-select">
@@ -95,6 +97,14 @@
         <div class="settings-foot">
           <button id="settings-back" data-i18n="back">← 返回</button>
           <button id="settings-save" class="primary" data-i18n="save">保存</button>
+        </div>
+      </div>
+
+      <!-- 使用说明 -->
+      <div id="guide-view" hidden>
+        <div class="settings-scroll" id="guide-body"></div>
+        <div class="settings-foot">
+          <button id="guide-back" data-i18n="back">← 返回</button>
         </div>
       </div>
     </div>

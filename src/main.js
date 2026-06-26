@@ -4,7 +4,7 @@ const { listen } = window.__TAURI__.event;
 const { WebviewWindow, getAllWebviewWindows } = window.__TAURI__.webviewWindow;
 const appWindow = getCurrentWindow();
 
-const SIZES = { ball: [130, 130], list: [320, 460], settings: [360, 560] };
+const SIZES = { ball: [130, 130], list: [320, 460], settings: [360, 560], guide: [360, 560] };
 
 const LABEL = appWindow.label;
 const sourceId = LABEL.startsWith("ball::") ? LABEL.slice("ball::".length) : null;
@@ -31,6 +31,7 @@ const I18N = {
     canvasApiKind: "Canvas(登录免ICS)",
     needCanvas: "先填 Canvas 网址,或在上面添加一个 Canvas 源",
     needLogin: "还没登录 Canvas", loginCanvas: "登录 Canvas", loginShort: "去登录", refreshed: "已刷新",
+    guide: "📖 使用说明",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
     testCanvasOk: (name) => `✓ 成功,已登录:${name}`,
   },
@@ -50,6 +51,7 @@ const I18N = {
     canvasApiKind: "Canvas (login, no ICS)",
     needCanvas: "Enter a Canvas URL, or add a Canvas source above",
     needLogin: "Not logged in to Canvas", loginCanvas: "Log in to Canvas", loginShort: "Log in", refreshed: "Refreshed",
+    guide: "📖 Guide",
     testOk: (n) => `✓ OK — parsed ${n} events`,
     testCanvasOk: (name) => `✓ OK — logged in: ${name}`,
   },
@@ -68,11 +70,69 @@ function applyLang() {
     el.placeholder = t(el.getAttribute("data-i18n-ph"));
   });
   document.getElementById("gear").title = t("settings");
+  document.getElementById("help").title = t("guide");
   const ls = document.getElementById("lang-select");
   if (ls) ls.value = lang;
   applyIdentity();
   renderBallAndList();
   renderSettings();
+  renderGuide();
+}
+
+// ---------- 使用说明(指南) ----------
+const GUIDE = {
+  zh: `
+    <h2>这是什么</h2>
+    <p>桌面上的悬浮球,显示你未来 7 天要交的作业,不用一直开着 Canvas。每个数据源一个球。</p>
+    <h2>① 添加来源</h2>
+    <p>点球 → ⚙ → <b>添加源</b>,选类型:</p>
+    <ul>
+      <li><b>Canvas(登录免ICS)</b> —— 最省事。填学校 Canvas 网址(如 <code>https://你的学校.instructure.com</code>)→ 测试 → 添加 → 保存。再点球上的「去登录」登录一次,作业就出来了。</li>
+      <li><b>Canvas (ICS)</b> —— 想用日历订阅:Canvas 里 Calendar → Calendar Feed,复制那条 <code>.ics</code> 链接填进来。</li>
+      <li><b>Google 日历 / 通用 ICS</b> —— 填对应的 ICS 链接。</li>
+    </ul>
+    <h2>② 看 &amp; 用</h2>
+    <ul>
+      <li>点球展开列表;点某条用浏览器打开。</li>
+      <li>做完点 <b>✓</b> 标记完成,它从计数消失。</li>
+      <li>按住球可拖动,位置会记住。</li>
+      <li>数字颜色 = 任务多少(少绿多红);倒计时颜色 = 离最近 ddl 多久。</li>
+    </ul>
+    <h2>③ 自动完成(仅 Canvas)</h2>
+    <p>登录一次后,已提交 / 已评分的作业会被自动隐藏,不用手动打勾。登录态会保留;过期了再登一次。</p>
+    <h2>隐私</h2>
+    <p>你的链接和登录只存在自己电脑上,不上传任何服务器。</p>
+    <h2>小提示</h2>
+    <p>没有具体时间的作业按当天 23:59 算。设置里可切中/英文、改刷新间隔。</p>
+  `,
+  en: `
+    <h2>What it is</h2>
+    <p>A desktop floating ball showing what's due in the next 7 days, so you don't keep Canvas open. One ball per source.</p>
+    <h2>① Add a source</h2>
+    <p>Click the ball → ⚙ → <b>Add source</b>, pick a kind:</p>
+    <ul>
+      <li><b>Canvas (login, no ICS)</b> — easiest. Type your school's Canvas URL (e.g. <code>https://yourschool.instructure.com</code>) → Test → Add → Save. Then click <b>Log in</b> on the ball once and your assignments appear.</li>
+      <li><b>Canvas (ICS)</b> — if you prefer a calendar feed: in Canvas, Calendar → Calendar Feed, copy the <code>.ics</code> URL.</li>
+      <li><b>Google Calendar / generic ICS</b> — paste the matching ICS URL.</li>
+    </ul>
+    <h2>② View &amp; use</h2>
+    <ul>
+      <li>Click the ball to expand the list; click an item to open it.</li>
+      <li>Hit <b>✓</b> to mark done — it leaves the count.</li>
+      <li>Drag the ball to move it; its position is remembered.</li>
+      <li>Count color = how many (green→red); countdown color = time left to the nearest deadline.</li>
+    </ul>
+    <h2>③ Auto-complete (Canvas only)</h2>
+    <p>After one login, submitted / graded assignments are hidden automatically. The session persists; just log in again if it expires.</p>
+    <h2>Privacy</h2>
+    <p>Your URLs and login stay on your own computer — nothing is uploaded to any server.</p>
+    <h2>Tip</h2>
+    <p>Assignments with no specific time are treated as due 23:59. Settings can switch 中文/English and the refresh interval.</p>
+  `,
+};
+function renderGuide() {
+  const el = document.getElementById("guide-body");
+  if (el) el.innerHTML = GUIDE[lang] || GUIDE.zh;
 }
 
 function esc(s) {
@@ -278,8 +338,18 @@ async function setState(s) {
   document.getElementById("card").hidden = s === "ball";
   document.getElementById("list-view").hidden = s !== "list";
   document.getElementById("settings-view").hidden = s !== "settings";
+  document.getElementById("guide-view").hidden = s !== "guide";
   document.getElementById("gear").hidden = s !== "list";
+  document.getElementById("help").hidden = s !== "list";
   document.getElementById("collapse").hidden = s !== "list";
+}
+
+// 打开使用说明,记住从哪进来的好返回
+let guideFrom = "list";
+function openGuide() {
+  guideFrom = state === "settings" ? "settings" : "list";
+  renderGuide();
+  setState("guide");
 }
 
 // ---------- 设置面板 ----------
@@ -572,6 +642,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     setState("settings");
   });
 
+  const help = document.getElementById("help");
+  ["mousedown", "mouseup", "click"].forEach((ev) =>
+    help.addEventListener(ev, (e) => e.stopPropagation()),
+  );
+  help.addEventListener("click", openGuide);
+
   const collapse = document.getElementById("collapse");
   ["mousedown", "mouseup", "click"].forEach((ev) =>
     collapse.addEventListener(ev, (e) => e.stopPropagation()),
@@ -580,6 +656,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("settings-back").addEventListener("click", () => setState("list"));
   document.getElementById("settings-save").addEventListener("click", saveSettings);
+  document.getElementById("open-guide").addEventListener("click", openGuide);
+  document.getElementById("guide-back").addEventListener("click", () => setState(guideFrom));
   document.getElementById("add-test").addEventListener("click", testSource);
   document.getElementById("add-btn").addEventListener("click", addSource);
 
