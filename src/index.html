@@ -16,8 +16,48 @@
 
     <!-- 展开态:卡片 -->
     <div id="card" hidden>
-      <div id="card-header">未来 7 天 · <span id="card-count">0</span>（点此收起）</div>
-      <div id="list"></div>
+      <div id="card-header">
+        <span id="header-title">未来 7 天 · <span id="card-count">0</span></span>
+        <span id="gear" title="设置">⚙</span>
+      </div>
+
+      <!-- 列表视图 -->
+      <div id="list-view">
+        <div id="list"></div>
+      </div>
+
+      <!-- 设置视图 -->
+      <div id="settings-view" hidden>
+        <div class="settings-scroll">
+          <div class="field">
+            <label>刷新间隔(分钟)</label>
+            <input id="refresh-input" type="number" min="1" value="30" />
+          </div>
+
+          <div class="section-title">数据源</div>
+          <div id="source-list"></div>
+
+          <div class="section-title">添加源</div>
+          <div class="add-form">
+            <input id="add-name" placeholder="名字(如 Canvas)" />
+            <input id="add-url" placeholder="ICS 链接 https://....ics" />
+            <div class="add-row2">
+              <select id="add-kind">
+                <option value="canvas">Canvas</option>
+                <option value="ics">通用 ICS</option>
+              </select>
+              <input id="add-color" type="color" value="#e23b3b" />
+              <button id="add-test">测试</button>
+              <button id="add-btn">添加</button>
+            </div>
+            <div id="add-msg" class="msg"></div>
+          </div>
+        </div>
+        <div class="settings-foot">
+          <button id="settings-back">← 返回</button>
+          <button id="settings-save" class="primary">保存</button>
+        </div>
+      </div>
     </div>
   </body>
 </html>
