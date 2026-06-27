@@ -168,22 +168,16 @@ async fn ensure_canvas_session(
     app: &tauri::AppHandle,
     base_url: &str,
 ) -> Result<tauri::WebviewWindow, String> {
+    // 已有会话窗就直接复用 —— 绝不在这里导航!
+    // 登录轮询期间窗口会跳 Canvas→SSO→Duo 等多个域名,若这里发现"域名不是 Canvas"就
+    // 把它拽回 Canvas,会反复打断正在进行的 SSO/Duo 登录("登录到一半进不去")。
+    // 换学校时的导航交给用户点登录那一下(open_canvas_login)显式处理。
+    if let Some(w) = app.get_webview_window("canvas-login") {
+        return Ok(w);
+    }
     let target: tauri::Url = norm_base(base_url)
         .parse()
         .map_err(|e| format!("bad url: {}", e))?;
-    // 已有会话窗:若它停在别的学校域名上,导航过去并等 cookie 重新加载(支持换学校)
-    if let Some(w) = app.get_webview_window("canvas-login") {
-        let same = w
-            .url()
-            .ok()
-            .map(|u| u.origin() == target.origin())
-            .unwrap_or(false);
-        if !same {
-            let _ = w.navigate(target.clone());
-            tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
-        }
-        return Ok(w);
-    }
     // 创建隐藏会话窗;并发下若另一个任务抢先用同名标签建好了(build 报重名错),
     // 回退去取它,避免那个球白报一次错。
     match WebviewWindowBuilder::new(app, "canvas-login", WebviewUrl::External(target))
