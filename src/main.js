@@ -10,7 +10,7 @@ const LABEL = appWindow.label;
 const sourceId = LABEL.startsWith("ball::") ? LABEL.slice("ball::".length) : null;
 
 let items = []; // 当前 ddl(null = 出错)
-let config = { sources: [], windowDays: 7, refreshMinutes: 30, lang: "zh", canvasBaseUrl: "" };
+let config = { sources: [], windowDays: 7, refreshMinutes: 30, lang: "zh" };
 let state = "ball";
 let refreshTimer = null;
 
@@ -27,9 +27,9 @@ const I18N = {
     needNameUrl: "名字和链接都要填", added: "已添加,记得点保存",
     saveFail: "保存失败:", enabled: "启用", del: "删除", collapse: "收起", markDone: "标记完成",
     canvasUrlPh: "Canvas 网址 https://xxx.instructure.com",
-    canvasUrlHint: "留空则自动取自上面的 Canvas 源链接",
     canvasApiKind: "Canvas(登录免ICS)",
-    needCanvas: "先填 Canvas 网址,或在上面添加一个 Canvas 源",
+    needCanvas: "先在上面添加一个 Canvas 源",
+    autoDoneHint: "给你的 Canvas 源开自动完成:登录一次,已提交的作业会自动划掉。想直接按网址加 Canvas?用上面的「添加源 → Canvas(登录免ICS)」。",
     needLogin: "还没登录 Canvas", loginCanvas: "登录 Canvas", loginShort: "去登录", refreshed: "已刷新",
     guide: "📖 使用说明",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
@@ -47,9 +47,9 @@ const I18N = {
     needNameUrl: "Name and URL are required", added: "Added — remember to Save",
     saveFail: "Save failed: ", enabled: "Enabled", del: "Delete", collapse: "Collapse", markDone: "Mark done",
     canvasUrlPh: "Canvas URL https://xxx.instructure.com",
-    canvasUrlHint: "Leave blank to use your Canvas source's URL above",
     canvasApiKind: "Canvas (login, no ICS)",
-    needCanvas: "Enter a Canvas URL, or add a Canvas source above",
+    needCanvas: "Add a Canvas source above first",
+    autoDoneHint: "Turn on auto-complete for your Canvas source: log in once and submitted assignments get checked off. Want to add Canvas by URL? Use \"Add source → Canvas (login, no ICS)\" above.",
     needLogin: "Not logged in to Canvas", loginCanvas: "Log in to Canvas", loginShort: "Log in", refreshed: "Refreshed",
     guide: "📖 Guide",
     testOk: (n) => `✓ OK — parsed ${n} events`,
@@ -355,8 +355,6 @@ function openGuide() {
 // ---------- 设置面板 ----------
 function renderSettings() {
   document.getElementById("refresh-input").value = config.refreshMinutes;
-  const cb = document.getElementById("canvas-base");
-  if (cb) cb.value = config.canvasBaseUrl || "";
   const wrap = document.getElementById("source-list");
   wrap.innerHTML = "";
   if (!config.sources.length) {
@@ -492,8 +490,6 @@ async function saveSettings() {
     parseInt(document.getElementById("refresh-input").value, 10) || 30,
   );
   config.lang = lang;
-  const cb = document.getElementById("canvas-base");
-  if (cb) config.canvasBaseUrl = cb.value.trim();
   try {
     await invoke("save_config", { config });
   } catch (e) {
@@ -579,24 +575,9 @@ function canvasBase() {
     const o = normOrigin(me.url);
     if (o) return o;
   }
-  // 否则用手填的网址(不配 ICS 也能用登录/自动完成),再否则取第一个 Canvas 源
-  const manual = (config.canvasBaseUrl || "").trim();
-  if (manual) {
-    const o = normOrigin(manual);
-    if (o) return o;
-  }
+  // 否则取第一个 Canvas 源的网址
   const c = (config.sources || []).find((s) => s.kind === "canvas" || s.kind === "canvas-api");
   return c ? normOrigin(c.url) : null;
-}
-// 设置面板里的按钮用这个:优先用「Canvas 网址」框里刚填的值(没点保存也能用),否则回退到已保存的
-function canvasBaseLive() {
-  const cb = document.getElementById("canvas-base");
-  const v = cb ? cb.value.trim() : "";
-  if (v) {
-    const o = normOrigin(v);
-    if (o) return o;
-  }
-  return canvasBase();
 }
 // 登录是在另一个窗口完成的,收不到完成信号 → 打开登录后轮询几次,拉到数据就停
 async function loginAndPoll() {
@@ -681,7 +662,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Canvas 自动完成:按钮
   document.getElementById("canvas-login-btn").addEventListener("click", async () => {
-    const base = canvasBaseLive();
+    const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
@@ -695,7 +676,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
   document.getElementById("canvas-test-btn").addEventListener("click", async () => {
-    const base = canvasBaseLive();
+    const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
@@ -715,7 +696,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
   document.getElementById("canvas-sync-btn").addEventListener("click", async () => {
-    const base = canvasBaseLive();
+    const base = canvasBase();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
