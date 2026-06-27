@@ -129,11 +129,58 @@ body {
 
 #list-view,
 #settings-view,
-#guide-view {
+#guide-view,
+#wizard-view {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* ---------- 首次使用向导 ---------- */
+.wizard-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 11px;
+  padding: 18px;
+}
+.wizard-title {
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  cursor: grab;
+  margin-bottom: 2px;
+}
+.wizard-title:active {
+  cursor: grabbing;
+}
+#wizard-url {
+  width: 100%;
+  padding: 7px 9px;
+}
+#wizard-go {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+}
+#wizard-msg {
+  text-align: center;
+  min-height: 14px;
+}
+.linklike {
+  background: none;
+  border: none;
+  color: #9ad;
+  font-size: 11px;
+  cursor: pointer;
+  align-self: center;
+  padding: 2px;
+}
+.linklike:hover {
+  background: none;
+  text-decoration: underline;
 }
 
 /* ---------- 列表 ---------- */

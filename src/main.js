@@ -4,7 +4,7 @@ const { listen } = window.__TAURI__.event;
 const { WebviewWindow, getAllWebviewWindows } = window.__TAURI__.webviewWindow;
 const appWindow = getCurrentWindow();
 
-const SIZES = { ball: [130, 130], list: [320, 460], settings: [360, 560], guide: [360, 560] };
+const SIZES = { ball: [130, 130], list: [320, 460], settings: [360, 560], guide: [360, 560], wizard: [320, 250] };
 
 const LABEL = appWindow.label;
 const sourceId = LABEL.startsWith("ball::") ? LABEL.slice("ball::".length) : null;
@@ -32,6 +32,13 @@ const I18N = {
     autoDoneHint: "给你的 Canvas 源开自动完成:登录一次,已提交的作业会自动划掉。想直接按网址加 Canvas?用上面的「添加源 → Canvas(登录免ICS)」。",
     needLogin: "还没登录 Canvas", loginCanvas: "登录 Canvas", loginShort: "去登录", refreshed: "已刷新",
     guide: "📖 使用说明",
+    wizardTitle: "👋 添加你的 Canvas",
+    wizardPh: "粘贴 Canvas 网址,或 ICS 日历链接",
+    wizardGo: "开始",
+    wizardAdvanced: "高级设置 ›",
+    wizardNeedUrl: "先粘贴你的 Canvas 网址",
+    wizardBadUrl: "网址看起来不太对,检查一下?",
+    wizardLoggingIn: "在弹出的窗口里登录,登录后会自动出现你的作业…",
     testOk: (n) => `✓ 成功,解析到 ${n} 个事件`,
     testCanvasOk: (name) => `✓ 成功,已登录:${name}`,
   },
@@ -52,6 +59,13 @@ const I18N = {
     autoDoneHint: "Turn on auto-complete for your Canvas source: log in once and submitted assignments get checked off. Want to add Canvas by URL? Use \"Add source → Canvas (login, no ICS)\" above.",
     needLogin: "Not logged in to Canvas", loginCanvas: "Log in to Canvas", loginShort: "Log in", refreshed: "Refreshed",
     guide: "📖 Guide",
+    wizardTitle: "👋 Add your Canvas",
+    wizardPh: "Paste your Canvas URL, or an ICS calendar link",
+    wizardGo: "Start",
+    wizardAdvanced: "Advanced settings ›",
+    wizardNeedUrl: "Paste your Canvas URL first",
+    wizardBadUrl: "That URL doesn't look right — check it?",
+    wizardLoggingIn: "Log in in the popup — your assignments will appear automatically…",
     testOk: (n) => `✓ OK — parsed ${n} events`,
     testCanvasOk: (name) => `✓ OK — logged in: ${name}`,
   },
@@ -339,6 +353,8 @@ async function setState(s) {
   document.getElementById("list-view").hidden = s !== "list";
   document.getElementById("settings-view").hidden = s !== "settings";
   document.getElementById("guide-view").hidden = s !== "guide";
+  document.getElementById("wizard-view").hidden = s !== "wizard";
+  document.getElementById("card-header").hidden = s === "wizard";
   document.getElementById("gear").hidden = s !== "list";
   document.getElementById("help").hidden = s !== "list";
   document.getElementById("collapse").hidden = s !== "list";
@@ -419,10 +435,11 @@ function addSource() {
   const kind = document.getElementById("add-kind").value;
   const color = document.getElementById("add-color").value;
   const msg = document.getElementById("add-msg");
-  if (!name || !url) {
-    msg.textContent = t("needNameUrl");
+  if (!url) {
+    msg.textContent = t("needUrl");
     return;
   }
+  const finalName = name || (detectSource(url) || {}).name || "Canvas"; // 名字留空就自动起
   let saveUrl = url;
   if (kind === "canvas-api") {
     // 统一成 https://xxx.instructure.com(去掉多余路径/补 scheme),否则后端拉数据会失败
@@ -433,7 +450,7 @@ function addSource() {
     }
     saveUrl = o;
   }
-  config.sources.push({ id: crypto.randomUUID(), name, kind, url: saveUrl, color, enabled: true });
+  config.sources.push({ id: crypto.randomUUID(), name: finalName, kind, url: saveUrl, color, enabled: true });
   document.getElementById("add-name").value = "";
   document.getElementById("add-url").value = "";
   msg.textContent = t("added");
@@ -594,6 +611,105 @@ async function loginAndPoll() {
     if (Array.isArray(items)) break; // 成功(拿到数组)就停
   }
 }
+
+// 从用户粘的一条网址猜出源类型 + 起个名(给首次向导用,省得让用户选类型/起名)
+function detectSource(input) {
+  const low = input.toLowerCase();
+  if (low.includes(".ics")) {
+    // ICS 订阅源:按域名细分
+    let kind = "ics",
+      name = "Calendar";
+    if (low.includes("instructure") || low.includes("canvas")) {
+      kind = "canvas";
+      name = "Canvas";
+    } else if (low.includes("google")) {
+      kind = "google";
+      name = "Google";
+    } else {
+      try {
+        name = new URL(input).hostname.replace(/^www\./, "");
+      } catch (_) {}
+    }
+    return { kind, url: input, name };
+  }
+  // 否则当作 Canvas 站点网址(登录免 ICS)
+  const origin = normOrigin(input);
+  if (!origin) return null;
+  let name = "Canvas";
+  try {
+    const h = new URL(origin).hostname;
+    if (!h.includes(".")) return null; // "hello" 这种没有点的不是网址
+    if (!/instructure|canvas/.test(h)) name = h.replace(/^www\./, "");
+  } catch (_) {
+    return null;
+  }
+  return { kind: "canvas-api", url: origin, name };
+}
+
+// 首次向导:一个框一个键搞定 —— 自动判类型/起名/保存/建球;canvas-api 还自动拉起登录并轮询,
+// 这样建出来的球一上来就是有作业的。
+let wizardBusy = false;
+async function wizardGo() {
+  if (wizardBusy) return; // 轮询登录期间防止重复点击建出重复源
+  const input = document.getElementById("wizard-url").value.trim();
+  const msg = document.getElementById("wizard-msg");
+  if (!input) {
+    msg.textContent = t("wizardNeedUrl");
+    return;
+  }
+  const d = detectSource(input);
+  if (!d) {
+    msg.textContent = t("wizardBadUrl");
+    return;
+  }
+  wizardBusy = true;
+  document.getElementById("wizard-go").disabled = true;
+  config.sources.push({
+    id: crypto.randomUUID(),
+    name: d.name,
+    kind: d.kind,
+    url: d.url,
+    color: "#e23b3b",
+    enabled: true,
+  });
+  config.lang = lang;
+  try {
+    await invoke("save_config", { config });
+  } catch (e) {
+    config.sources.pop(); // 存失败就回滚,别留脏数据
+    msg.textContent = t("saveFail") + e;
+    wizardBusy = false;
+    document.getElementById("wizard-go").disabled = false;
+    return;
+  }
+  if (d.kind === "canvas-api") {
+    // 直接拉起登录窗,并轮询到登录成功,这样建出来的球一上来就有作业
+    msg.textContent = t("wizardLoggingIn");
+    try {
+      await invoke("open_canvas_login", { baseUrl: d.url });
+    } catch (_) {}
+    let loggedIn = false;
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        await invoke("canvas_api", { baseUrl: d.url, path: "/api/v1/users/self" });
+        loggedIn = true;
+        break; // 登录成功
+      } catch (_) {
+        /* 还没登好,继续等 */
+      }
+    }
+    if (loggedIn) {
+      // 关掉那个可见的登录窗(cookie 已持久化,球会用隐藏会话窗读)
+      try {
+        const login = (await getAllWebviewWindows()).find((w) => w.label === "canvas-login");
+        if (login) await login.close();
+      } catch (_) {}
+    }
+  }
+  await syncWindows(); // 建出对应的球,并关掉本 setup 窗
+}
+
 function isCanvasBall() {
   const me = (config.sources || []).find((s) => s.id === sourceId);
   return !!(me && me.kind === "canvas");
@@ -645,10 +761,24 @@ window.addEventListener("DOMContentLoaded", async () => {
   );
   collapse.addEventListener("click", () => setState("ball"));
 
-  document.getElementById("settings-back").addEventListener("click", () => setState("list"));
+  document.getElementById("settings-back").addEventListener("click", () =>
+    setState(sourceId === null ? "wizard" : "list"),
+  );
   document.getElementById("settings-save").addEventListener("click", saveSettings);
   document.getElementById("open-guide").addEventListener("click", openGuide);
   document.getElementById("guide-back").addEventListener("click", () => setState(guideFrom));
+
+  // 首次向导
+  makeDragClick(document.getElementById("wizard-title"), () => {});
+  document.getElementById("wizard-go").addEventListener("click", wizardGo);
+  document.getElementById("wizard-url").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") wizardGo();
+  });
+  document.getElementById("wizard-advanced").addEventListener("click", () => {
+    renderSettings();
+    setState("settings");
+  });
+
   document.getElementById("add-test").addEventListener("click", testSource);
   document.getElementById("add-btn").addEventListener("click", addSource);
 
@@ -744,8 +874,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   if (sourceId === null) {
-    renderSettings();
-    await setState("settings");
+    await setState("wizard"); // 首次/无源 → 单字段向导
   } else {
     await setState("ball");
   }

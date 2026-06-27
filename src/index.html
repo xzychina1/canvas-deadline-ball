@@ -102,6 +102,17 @@
           <button id="guide-back" data-i18n="back">← 返回</button>
         </div>
       </div>
+
+      <!-- 首次使用向导 -->
+      <div id="wizard-view" hidden>
+        <div class="wizard-body">
+          <div id="wizard-title" class="wizard-title" data-i18n="wizardTitle">👋 添加你的 Canvas</div>
+          <input id="wizard-url" data-i18n-ph="wizardPh" placeholder="粘贴 Canvas 网址,或 ICS 日历链接" />
+          <button id="wizard-go" class="primary" data-i18n="wizardGo">开始</button>
+          <div id="wizard-msg" class="msg"></div>
+          <button id="wizard-advanced" class="linklike" data-i18n="wizardAdvanced">高级设置 ›</button>
+        </div>
+      </div>
     </div>
   </body>
 </html>
