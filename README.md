@@ -4,6 +4,10 @@
 
 Always-on-top desktop floating balls that show your upcoming deadlines from **Canvas**, **Google Calendar**, or any **ICS** calendar feed — one ball per source, with a live countdown — so you can glance at what's due without opening anything.
 
+**Windows** · ⬇️ [Download the latest release](../../releases/latest) · 🛟 [Install help](INSTALL.md) · 🔒 [Privacy](PRIVACY.md)
+
+<!-- TODO: drop a 5–10s demo GIF here (docs/demo.gif) — it's the single biggest thing visitors look at -->
+
 <p align="center">
   <img src="docs/balls.png" width="420" alt="Two deadline balls on the desktop" /><br />
   <img src="docs/detail1.png" width="280" alt="Expanded deadline list" />
@@ -24,12 +28,20 @@ Canvas is fine, but you have to *go look*. This lives on your desktop instead: a
 - ⚙️ Visual settings — add/remove sources, pick colors, switch 中文 / English; auto-refreshes on a timer
 - 🪶 Lightweight — built with [Tauri](https://tauri.app) (Rust + the OS WebView), not Electron
 
+## Download & install
+
+**Windows only** for now. Grab the installer or the portable `.exe` from the [**Releases page**](../../releases/latest).
+
+> On first run, Windows SmartScreen shows a blue *"Windows protected your PC"* warning because the app isn't code-signed — normal for small indie apps. Click **More info → Run anyway** (just once). Full walkthrough + how to verify it's safe: **[INSTALL.md](INSTALL.md)**.
+
+Everything runs locally — no account, no server, nothing uploaded. See **[Privacy](PRIVACY.md)**.
+
 ## Setup
 
 1. **Get a calendar feed (ICS) URL.**
    - **Canvas**: *Calendar → Calendar Feed* (bottom-right) → copy the `.ics` URL.
    - **Google Calendar**: *Settings and sharing → Integrate calendar → Secret address in iCal format*.
-   > ⚠️ Treat these URLs like a password — anyone who has one can read your calendar. You can reset it if it leaks.
+   > ⚠️ Treat these URLs like a password — anyone who has one can read your calendar. You can reset it if it leaks. (It's stored only on your machine — see [Privacy](PRIVACY.md).)
 2. **Add it in the app**: click the ball → ⚙ settings → paste the URL, pick a kind (Canvas / Google / generic ICS) and a color → **Test** → **Add** → **Save**. A ball appears for that source.
 3. *(optional)* **Canvas auto-complete**: in settings, **log in to Canvas** once. From then on the app reads your submitted assignments via the Canvas API using your logged-in session and checks them off automatically. Handy when your school blocks API tokens (e.g. UMich) — it works through the normal web login, like a campus-VPN sign-in.
    > **Which Canvas does it log into?** *Yours.* The site URL is taken automatically from your Canvas ICS link, so it always points at your own school — nothing is hard-coded. Don't want to set up an ICS source, or does your Canvas live on a different host? Just type it into the **Canvas URL** box in settings, e.g. `https://yourschool.instructure.com`.
