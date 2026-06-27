@@ -330,6 +330,17 @@ body {
   text-align: left;
   background: rgba(255, 255, 255, 0.08);
 }
+.top-links {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.top-links .guide-link {
+  flex: 1;
+  width: auto;
+  margin-bottom: 0;
+  text-align: center;
+}
 #guide-body {
   font-size: 12px;
   line-height: 1.55;

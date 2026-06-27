@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "canvas-deadline-ball"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "chrono",
  "ical",

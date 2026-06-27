@@ -32,6 +32,7 @@ const I18N = {
     autoDoneHint: "给你的 Canvas 源开自动完成:登录一次,已提交的作业会自动划掉。想直接按网址加 Canvas?用上面的「添加源 → Canvas(登录免ICS)」。",
     needLogin: "还没登录 Canvas", loginCanvas: "登录 Canvas", loginShort: "去登录", refreshed: "已刷新",
     guide: "📖 使用说明",
+    feedback: "💬 反馈",
     wizardTitle: "👋 添加你的 Canvas",
     wizardPh: "粘贴 Canvas 网址,或 ICS 日历链接",
     wizardGo: "开始",
@@ -59,6 +60,7 @@ const I18N = {
     autoDoneHint: "Turn on auto-complete for your Canvas source: log in once and submitted assignments get checked off. Want to add Canvas by URL? Use \"Add source → Canvas (login, no ICS)\" above.",
     needLogin: "Not logged in to Canvas", loginCanvas: "Log in to Canvas", loginShort: "Log in", refreshed: "Refreshed",
     guide: "📖 Guide",
+    feedback: "💬 Feedback",
     wizardTitle: "👋 Add your Canvas",
     wizardPh: "Paste your Canvas URL, or an ICS calendar link",
     wizardGo: "Start",
@@ -147,6 +149,24 @@ const GUIDE = {
 function renderGuide() {
   const el = document.getElementById("guide-body");
   if (el) el.innerHTML = GUIDE[lang] || GUIDE.zh;
+}
+
+// 反馈:打开一个预填了关键问题的 GitHub issue(以后想换成 Google 表单,改这个链接即可)
+const FEEDBACK_URL =
+  "https://github.com/xzychina1/canvas-deadline-ball/issues/new?title=" +
+  encodeURIComponent("反馈 / Feedback") +
+  "&body=" +
+  encodeURIComponent(
+    [
+      "**学校 / School:** ",
+      "**登录后作业拉出来了吗? / Did Canvas login pull your assignments?** (是 / 部分 / 否 · yes / partly / no)",
+      "**会每天留着用吗? / Would you keep it on your screen daily?** ",
+      "**哪里坏了或困惑? / Anything broken or confusing?** ",
+      "",
+    ].join("\n"),
+  );
+function openFeedback() {
+  invoke("open_url", { url: FEEDBACK_URL }).catch(() => {});
 }
 
 function esc(s) {
@@ -767,6 +787,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("settings-save").addEventListener("click", saveSettings);
   document.getElementById("open-guide").addEventListener("click", openGuide);
   document.getElementById("guide-back").addEventListener("click", () => setState(guideFrom));
+  document.getElementById("open-feedback").addEventListener("click", openFeedback);
+  document.getElementById("guide-feedback").addEventListener("click", openFeedback);
 
   // 首次向导
   makeDragClick(document.getElementById("wizard-title"), () => {});

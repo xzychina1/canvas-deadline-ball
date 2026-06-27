@@ -77,9 +77,15 @@ npm run tauri build    # produce a release installer
 
 Tauri v2 · Rust · vanilla JS · Canvas ICS feed + planner API
 
+## Roadmap / ideas (your input wanted)
+
+Being considered — tell me if you'd actually use it:
+
+- **Deadline reminders** — a heads-up (e.g. ~1 hour before something's due). I'm holding off on purpose: a popup that interrupts you mid-quiz is exactly the kind of thing that makes people uninstall, so *if* it ships it'll be a gentle, optional, off-by-default notification — not a focus-stealing dialog. **Want it? Say so.**
+
 ## Contributing / Issues
 
-Found a bug, hit a setup snag, or want it on **macOS / Linux** — or a calendar source it doesn't handle yet? Please [open an issue](../../issues). Usage questions and "please support X" requests are genuinely welcome — this is a small personal project, so what people ask for is what gets built next.
+Found a bug, hit a setup snag, or want it on **macOS / Linux** — or a calendar source it doesn't handle yet? There's a **💬 Feedback** button right in the app (settings + the guide), or [open an issue](../../issues). Usage questions and "please support X" requests are genuinely welcome — this is a small personal project, so what people ask for is what gets built next.
 
 ---
 

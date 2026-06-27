@@ -38,7 +38,10 @@
       <!-- 设置视图 -->
       <div id="settings-view" hidden>
         <div class="settings-scroll">
-          <button id="open-guide" class="guide-link" data-i18n="guide">📖 使用说明</button>
+          <div class="top-links">
+            <button id="open-guide" class="guide-link" data-i18n="guide">📖 使用说明</button>
+            <button id="open-feedback" class="guide-link" data-i18n="feedback">💬 反馈</button>
+          </div>
           <div class="field">
             <label data-i18n="language">语言</label>
             <select id="lang-select">
@@ -100,6 +103,7 @@
         <div class="settings-scroll" id="guide-body"></div>
         <div class="settings-foot">
           <button id="guide-back" data-i18n="back">← 返回</button>
+          <button id="guide-feedback" data-i18n="feedback">💬 反馈</button>
         </div>
       </div>
 
