@@ -588,6 +588,16 @@ function canvasBase() {
   const c = (config.sources || []).find((s) => s.kind === "canvas" || s.kind === "canvas-api");
   return c ? normOrigin(c.url) : null;
 }
+// 设置面板里的按钮用这个:优先用「Canvas 网址」框里刚填的值(没点保存也能用),否则回退到已保存的
+function canvasBaseLive() {
+  const cb = document.getElementById("canvas-base");
+  const v = cb ? cb.value.trim() : "";
+  if (v) {
+    const o = normOrigin(v);
+    if (o) return o;
+  }
+  return canvasBase();
+}
 // 登录是在另一个窗口完成的,收不到完成信号 → 打开登录后轮询几次,拉到数据就停
 async function loginAndPoll() {
   const base = canvasBase();
@@ -671,7 +681,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Canvas 自动完成:按钮
   document.getElementById("canvas-login-btn").addEventListener("click", async () => {
-    const base = canvasBase();
+    const base = canvasBaseLive();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
@@ -685,7 +695,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
   document.getElementById("canvas-test-btn").addEventListener("click", async () => {
-    const base = canvasBase();
+    const base = canvasBaseLive();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
@@ -705,7 +715,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
   document.getElementById("canvas-sync-btn").addEventListener("click", async () => {
-    const base = canvasBase();
+    const base = canvasBaseLive();
     const msg = document.getElementById("canvas-msg");
     if (!base) {
       msg.textContent = t("needCanvas");
